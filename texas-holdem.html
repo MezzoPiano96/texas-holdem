@@ -215,6 +215,18 @@
   .panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
   .panel-head .who{font-size:14px;color:var(--gold-bright);}
   .my-cards{display:flex;gap:8px;}
+  .hint-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+  .hint-toggle{
+    padding:6px 12px;border-radius:999px;border:1px solid #2c5345;background:#0f241c;
+    color:var(--cream);cursor:pointer;font-size:12px;
+  }
+  .hint-toggle:hover{border-color:var(--gold);}
+  .hint-toggle.active{background:var(--gold);color:var(--ink);border-color:var(--gold);font-weight:600;}
+  .hint-result{font-size:12.5px;color:var(--muted);}
+  .hint-result .pct{color:var(--gold-bright);font-weight:700;}
+  .hint-result.good .advice{color:var(--good);font-weight:700;}
+  .hint-result.bad .advice{color:var(--danger);font-weight:700;}
+  .hint-result.mid .advice{color:var(--gold-bright);font-weight:700;}
   .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
   .actions button{
     padding:11px 20px;border-radius:9px;border:none;cursor:pointer;
@@ -302,7 +314,7 @@
   .hr-name{font-size:12.5px;font-weight:700;color:var(--cream);}
   .hr-desc{font-size:11px;color:var(--muted);line-height:1.4;}
 
-  /* ---------- 音效/音乐开关 ---------- */
+  /* ---------- 音效/音乐/语音开关 ---------- */
   .audio-toggle{
     position:fixed;bottom:calc(16px + env(safe-area-inset-bottom));left:calc(16px + env(safe-area-inset-left));z-index:25;
     background:#16302554;border:1px solid #2c5345;color:var(--cream);
@@ -310,6 +322,7 @@
     backdrop-filter:blur(2px);
   }
   .audio-toggle:hover{border-color:var(--gold);}
+  .voice-toggle{bottom:calc(58px + env(safe-area-inset-bottom));}
 
   @media (max-width:900px){
     .hand-rank-panel{top:auto;bottom:calc(60px + env(safe-area-inset-bottom));left:calc(10px + env(safe-area-inset-left));right:calc(10px + env(safe-area-inset-right));width:auto;max-height:38vh;}
@@ -388,6 +401,10 @@
       <div class="who" id="actionWho">轮到 你 行动</div>
       <div class="my-cards" id="myCards"></div>
     </div>
+    <div class="hint-row">
+      <button class="hint-toggle" id="hintToggleBtn">💡 AI辅助</button>
+      <span class="hint-result" id="hintResult"></span>
+    </div>
     <div class="actions" id="actionButtons"></div>
   </div>
 
@@ -411,6 +428,7 @@
 </div>
 
 <button id="audioToggle" class="audio-toggle">🔊 声音</button>
+<button id="voiceToggle" class="audio-toggle voice-toggle">🗣️ 语音播报</button>
 
 <script>
 // ============================================================
@@ -600,6 +618,9 @@ class PokerGame{
   }
 
   applyAction(p, action){
+    // action.equity（如果有）是AI做这个决定时算出的自己胜率，纯粹给语音播报用来调
+    // 语调/音量/语速（信心越足说话越响越快），不影响任何游戏规则判断
+    p.lastActionEquity = action.equity!=null ? action.equity : null;
     const toCall=this.currentBet - p.bet;
     if(action.type==='fold'){
       if(toCall===0){ p.acted=true; p.lastAction='过牌'; return; } // 没必要弃牌时自动转过牌
@@ -669,11 +690,12 @@ class PokerGame{
     winner.stack+=amount;
     this.pushLog(`${winner.name} 获得彩池 ${amount}（其余玩家已弃牌）`);
     for(const p of this.players) p.totalBet=0;
-    this.onUpdate('win');
+    this.onUpdate('win', [winner.id]);
   }
   showdown(){
     const pots=this.computeSidePots();
     const results={};
+    const allWinnerIds=new Set();
     for(const p of this.players) if(!p.folded) results[p.id]=evaluate7([...p.holeCards, ...this.community]);
     for(const pot of pots){
       const eligible=pot.eligible.filter(id=>results[id]);
@@ -686,11 +708,12 @@ class PokerGame{
       for(const id of winners){
         this.players[id].stack += share + (remainder>0?1:0);
         if(remainder>0) remainder--;
+        allWinnerIds.add(id);
       }
       this.pushLog(`彩池 ${pot.amount} 由 ${winners.map(id=>this.players[id].name).join('、')} 赢得（${HAND_NAMES[results[winners[0]][0]]}）`);
     }
     for(const p of this.players) p.totalBet=0;
-    this.onUpdate('win');
+    this.onUpdate('win', [...allWinnerIds]);
   }
 }
 
@@ -771,6 +794,7 @@ function decideAction(p, view, game){
     action={type: view.toCall>0 ? 'call':'check'};
   }
   if(p.stack===0) action={type: view.toCall>0?'call':'check'};
+  action.equity=equity; // 暴露给语音播报用，跟规则判断无关
   return action;
 }
 
@@ -943,12 +967,61 @@ const SFX = (() => {
     fold(){ if(!muted) tone(200,0.18,'sine',0.07); },
     raise(){ if(!muted){ tone(700,0.05,'square',0.05); tone(950,0.05,'square',0.05,0.05); tone(1200,0.06,'square',0.05,0.1); } },
     win(){ if(!muted) [660,880,1100].forEach((f,i)=>tone(f,0.2,'triangle',0.07,i*0.09)); },
+    lose(){ if(!muted) [330,247,196].forEach((f,i)=>tone(f,0.2,'sine',0.06,i*0.14)); },
     click(){ if(!muted) tone(900,0.04,'triangle',0.05); },
     isMuted(){ return muted; },
     startBgm, stopBgm,
     toggleMute(){
       muted=!muted;
       if(muted) stopBgm(); else startBgm();
+      return muted;
+    },
+  };
+})();
+
+// ============================================================
+// 语音播报：用浏览器自带的 Web Speech API 念出英文牌桌术语，不需要任何音频文件。
+// AI的语调/音量/语速会跟着它自己算出的胜率（信心）走——牌好就说得更响更快更有底气，
+// 牌一般就说得更轻更慢更犹豫，真人自己的操作没有"信心"这个概念，统一用平稳语调。
+// 跟 SFX（背景音乐/音效）完全独立的开关，方便各自单独静音。
+// ============================================================
+const VOICE = (() => {
+  let muted=false;
+  const PHRASES = { fold:'Fold', check:'Check', call:'Call', bet:'Bet', raise:'Raise!', allin:'All in!' };
+  let preferredVoice=null;
+  function pickVoice(){
+    if(!('speechSynthesis' in window)) return;
+    const voices=speechSynthesis.getVoices();
+    preferredVoice = voices.find(v=>v.lang && v.lang.startsWith('en')) || voices[0] || null;
+  }
+  if('speechSynthesis' in window){
+    pickVoice();
+    speechSynthesis.onvoiceschanged = pickVoice;
+  }
+  function speak(actionType, equity){
+    if(muted || !('speechSynthesis' in window)) return;
+    const text = PHRASES[actionType];
+    if(!text) return;
+    speechSynthesis.cancel(); // 避免好几个AI连续行动时语音排队堆积、跟不上画面
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang='en-US';
+    if(preferredVoice) utter.voice=preferredVoice;
+    if(equity!=null){
+      const c=Math.max(0, Math.min(1, equity)); // 信心0~1
+      utter.rate = 0.85 + c*0.45;    // 越自信说得越快
+      utter.volume = 0.55 + c*0.45;  // 越自信说得越响
+      utter.pitch = 1.15 - c*0.3;    // 越自信声音越沉，越犹豫越上扬
+    } else {
+      utter.rate=1; utter.volume=0.85; utter.pitch=1;
+    }
+    speechSynthesis.speak(utter);
+  }
+  return {
+    speak,
+    isMuted(){ return muted; },
+    toggleMute(){
+      muted=!muted;
+      if(muted && 'speechSynthesis' in window) speechSynthesis.cancel();
       return muted;
     },
   };
@@ -1113,11 +1186,37 @@ function renderPrivacyGate(p, view){
   };
 }
 
+function getHintAdvice(equity, toCall, pot){
+  if(toCall===0){
+    if(equity>0.6) return {advice:'建议下注 / 加注', tone:'good'};
+    if(equity>0.4) return {advice:'可以小注试探，也能过牌', tone:'mid'};
+    return {advice:'建议过牌', tone:'mid'};
+  }
+  const potOdds = toCall/(pot+toCall);
+  const margin = equity - potOdds;
+  if(margin>0.1) return {advice:'建议跟注 / 加注（胜率明显占优）', tone:'good'};
+  if(margin>-0.05) return {advice:'跟注大致划算', tone:'mid'};
+  return {advice:'建议弃牌（胜率不够）', tone:'bad'};
+}
+function renderHint(p, view){
+  const btn=document.getElementById('hintToggleBtn');
+  const result=document.getElementById('hintResult');
+  btn.classList.toggle('active', !!p.hintEnabled);
+  btn.onclick=()=>{ p.hintEnabled=!p.hintEnabled; renderHint(p, view); };
+  if(!p.hintEnabled){ result.textContent=''; result.className='hint-result'; return; }
+  const numOpponents=game.players.filter(o=>o!==p && !o.folded).length;
+  const iterations = view.stage==='preflop' ? 260 : 170;
+  const equity = numOpponents>0 ? estimateEquity(p.holeCards, view.community, numOpponents, iterations) : 1;
+  const {advice, tone} = getHintAdvice(equity, view.toCall, view.pot);
+  result.className='hint-result '+tone;
+  result.innerHTML = `胜率约 <span class="pct">${Math.round(equity*100)}%</span> · <span class="advice">${advice}</span>`;
+}
 function renderActionPanel(p, view){
   const panel=document.getElementById('actionPanel');
   panel.classList.add('show');
   document.getElementById('nextHandBar').classList.remove('show');
   document.getElementById('actionWho').textContent = `轮到 ${p.name}（你）行动 · 底池 ${view.pot}（${formatBB(view.pot/game.bigBlind)}BB）`;
+  renderHint(p, view);
 
   const myCards=document.getElementById('myCards');
   myCards.innerHTML='';
@@ -1336,17 +1435,32 @@ function startGame(){
   runHand();
 }
 
+function actionTypeFromLastAction(la){
+  if(la.startsWith('弃牌')) return 'fold';
+  if(la.startsWith('过牌')) return 'check';
+  if(la.startsWith('跟注')) return 'call';
+  if(la.startsWith('全下')) return 'allin';
+  if(la.startsWith('加注')) return 'raise';
+  return null;
+}
 function onGameUpdate(type, payload){
   if(type==='render'){ renderAll(); }
   else if(type==='acting'){ actingSeatId=payload; renderAll(); }
   else if(type==='deal'){ SFX.deal(); }
-  else if(type==='win'){ SFX.win(); }
+  else if(type==='win'){
+    const winnerIds=payload||[];
+    const humanWon = game.players.some(p=>p.isHuman && winnerIds.includes(p.id));
+    if(humanWon) SFX.win(); else SFX.lose();
+  }
   else if(type==='action'){
-    const la=(payload && payload.lastAction) || '';
-    if(la.startsWith('弃牌')) SFX.fold();
-    else if(la.startsWith('过牌')) SFX.check();
-    else if(la.startsWith('跟注')) SFX.chip();
-    else if(la.startsWith('加注')||la.startsWith('全下')) SFX.raise();
+    const p=payload;
+    const la=p.lastAction||'';
+    const actionType=actionTypeFromLastAction(la);
+    if(actionType==='fold') SFX.fold();
+    else if(actionType==='check') SFX.check();
+    else if(actionType==='call') SFX.chip();
+    else if(actionType==='raise'||actionType==='allin') SFX.raise();
+    if(actionType) VOICE.speak(actionType, p.isHuman ? null : p.lastActionEquity);
   }
 }
 
@@ -1387,6 +1501,10 @@ document.getElementById('audioToggle').onclick = function(){
   SFX.init();
   const muted=SFX.toggleMute();
   this.textContent = muted ? '🔇 静音' : '🔊 声音';
+};
+document.getElementById('voiceToggle').onclick = function(){
+  const muted=VOICE.toggleMute();
+  this.textContent = muted ? '🔇 语音播报已关' : '🗣️ 语音播报';
 };
 
 const HAND_DESCRIPTIONS = [

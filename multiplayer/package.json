@@ -1,0 +1,13 @@
+{
+  "name": "texas-holdem-lan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "局域网联机德州扑克服务器",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
