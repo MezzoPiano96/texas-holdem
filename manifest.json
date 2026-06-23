@@ -1,0 +1,17 @@
+{
+  "name": "德州扑克 · 自建牌桌",
+  "short_name": "德州扑克",
+  "description": "5-10人自定义德州扑克牌桌，支持单人/双人同屏轮流对战AI",
+  "start_url": "./texas-holdem.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0807",
+  "theme_color": "#0b3d2e",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
