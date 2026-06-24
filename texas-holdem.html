@@ -135,6 +135,7 @@
   .pot-amount b{font-size:18px;color:var(--gold-bright);margin-left:4px;}
   .pot-sub{font-size:11px;color:var(--muted);margin-top:4px;letter-spacing:.3px;}
   .stage-label{font-size:11px;color:var(--muted);margin-top:6px;letter-spacing:2px;text-transform:uppercase;}
+  .game-timer{font-size:12px;color:var(--muted);margin-left:10px;font-weight:400;}
   .blinds-label{font-size:13px;color:var(--muted);margin-left:10px;font-weight:400;}
 
   .card{
@@ -394,7 +395,7 @@
   <p class="sub">选择人数和你想操控的 1-2 个座位，开局后由你操作所选座位，其余为AI对手。选择两个座位时会开启同屏轮流隐私模式，双方互不偷看手牌。</p>
 
   <div class="field">
-    <label>桌上人数（2-9，标准德州人数）</label>
+    <label>桌上人数</label>
     <div class="pill-row" id="countPicker"></div>
   </div>
 
@@ -435,7 +436,7 @@
 
 <div id="game">
   <div class="topbar">
-    <h2>德州扑克 · <span class="display" id="handCounter">第 1 手</span><span class="blinds-label" id="blindsLabel"></span></h2>
+    <h2>德州扑克 · <span class="display" id="handCounter">第 1 手</span><span class="blinds-label" id="blindsLabel"></span><span class="game-timer" id="gameTimer"></span></h2>
     <div class="btns">
       <button id="settingsBtn">⚙️ 设置</button>
       <button id="restartBtn">重新开局</button>
@@ -478,28 +479,10 @@
     <label class="setting-row">
       <span>游戏速度</span>
       <select id="settingSpeed">
-        <option value="0">极速 ⚡</option>
-        <option value="1" selected>快速</option>
-        <option value="2">普通（默认）</option>
-        <option value="3">慢速 🐢</option>
-      </select>
-    </label>
-    <label class="setting-row">
-      <span>语音播报</span>
-      <select id="settingVoice">
-        <option value="0">开启</option>
-        <option value="1">关闭</option>
-      </select>
-    </label>
-    <label class="setting-row">
-      <span>音效/音乐</span>
-      <select id="settingSFX">
-        <option value="0">开启</option>
-        <option value="1">关闭</option>
-      </select>
-    </label>
-  </div>
-  <button class="settings-close" onclick="document.getElementById('settingsPanel').classList.remove('show')">关闭</button>
+        <option value="0">极速 (~50ms)</option>
+        <option value="1" selected>快速 (~1s)</option>
+        <option value="2">普通 (~3s)</option>
+        <option value="3">慢速 (~5s)'settingsPanel').classList.remove('show')">关闭</button>
 </div>
 
 <div id="privacyGate">
@@ -632,7 +615,7 @@ class PokerGame{
     this.sbIdx=sbIdx; this.bbIdx=bbIdx;
     this.postBet(sbIdx,this.smallBlind);
     this.postBet(bbIdx,this.bigBlind);
-    this.currentBet=this.bigBlind;
+    this.currentBet=this.bigBlind; if(this.handCount===1){ this.onUpdate('newhand'); }
     this.minRaise=this.bigBlind;
     this.stage='preflop';
     this.pushLog(`第${this.handCount}手开始 · 庄家 ${this.players[this.dealerIdx].name} · 盲注 ${this.players[sbIdx].name}(SB) / ${this.players[bbIdx].name}(BB)`);
@@ -1611,10 +1594,13 @@ function renderLog(){
 // ============================================================
 // 7. 设置界面交互
 // ============================================================
+
+let gameStartTime=null;
+let gameTimerInterval=null;
 let chosenCount=6;
 let chosenSeats=[];
 let chosenStack=1000, chosenSB=5, chosenBB=10;
-let gameSpeed={label:'快速',minThink:900,maxThink:1400,waitVoice:true};
+let gameSpeed={label:'快速 (~1s)',minThink:900,maxThink:1400,waitVoice:true};
 
 function buildSetupUI(){
   const countPicker=document.getElementById('countPicker');
@@ -1672,9 +1658,9 @@ function buildSetupUI(){
 
   // 速度选择
   const SPEEDS = [
-    {label:'极速 ⚡',minThink:30,maxThink:100,noVoice:true},
-    {label:'快速',minThink:900,maxThink:1400,waitVoice:true},
-    {label:'普通（默认）',minThink:2500,maxThink:4000,waitVoice:true},
+    {label:'极速 (~50ms)',minThink:30,maxThink:100,noVoice:true},
+    {label:'快速 (~1s)',minThink:900,maxThink:1400,waitVoice:true},
+    {label:'普通 (~3s)',minThink:2500,maxThink:4000,waitVoice:true},
     {label:'慢速 🐢',minThink:4500,maxThink:7000,waitVoice:true},
   ];
   const spEl=document.getElementById('speedPicker');
@@ -1743,6 +1729,10 @@ function startGame(){
   actingSeatId = -1;
   game = new PokerGame(names, chosenStack, chosenSB, chosenBB, chosenSeats, decideFn, onGameUpdate);
   game.players.forEach(p=>{ if(!p.isHuman) p.aggression = 0.75 + Math.random()*0.6; });
+  VOICE.preload&&VOICE.preload();
+  gameStartTime=Date.now();
+  if(gameTimerInterval) clearInterval(gameTimerInterval);
+  gameTimerInterval=setInterval(()=>{ const el=document.getElementById('gameTimer'); if(el&&gameStartTime){ const s=Math.floor((Date.now()-gameStartTime)/1000); el.textContent=s>=60?Math.floor(s/60)+'m'+(s%60)+'s':s+'s'; } },1000);
 
   document.getElementById('setup').style.display='none';
   document.getElementById('game').style.display='block';
@@ -1775,10 +1765,11 @@ function onGameUpdate(type, payload){
       VOICE.speak('your_turn', null, genderForPlayer(game.players[payload]), game.players[payload].name);
     }
   }
+  else if(type==='newhand'){ const hp=game.players.find(p=>p.isHuman)||game.players[0]; VOICE.speak('new_hand',null,genderForPlayer(hp),hp.name); }
   else if(type==='deal'){
     SFX.deal();
     const s=game.stage;
-    if(s==='preflop'){ VOICE.speak('new_hand', null, genderForPlayer(game.players.find(p=>p.isHuman)||game.players[0]), (game.players.find(p=>p.isHuman)||game.players[0]).name); }
+    if(s==='preflop'){ /* new_hand moved to playHand */ }
     else if(s==='flop'){ VOICE.speak('flop', null, genderForPlayer(game.players.find(p=>p.isHuman)||game.players[0]), (game.players.find(p=>p.isHuman)||game.players[0]).name); }
     else if(s==='turn'){ VOICE.speak('turn_card', null, genderForPlayer(game.players.find(p=>p.isHuman)||game.players[0]), (game.players.find(p=>p.isHuman)||game.players[0]).name); }
     else if(s==='river'){ VOICE.speak('river', null, genderForPlayer(game.players.find(p=>p.isHuman)||game.players[0]), (game.players.find(p=>p.isHuman)||game.players[0]).name); }
@@ -1802,7 +1793,10 @@ function onGameUpdate(type, payload){
     else if(actionType==='call'){ SFX.chip(); VOICE.speak(actionType, p.isHuman ? null : p.lastActionEquity, genderForPlayer(p), p.name); }
     else if(actionType==='raise'||actionType==='allin'){ SFX.raise(); VOICE.speak(actionType, p.isHuman ? null : p.lastActionEquity, genderForPlayer(p), p.name); }
     // 给日志加行动标记
-    if(actionType) logPushStyled(la, 'entry-action');
+    if(actionType){
+      const roleTag = (p.id===game.sbIdx?'[SB] ':'') + (p.id===game.bbIdx?'[BB] ':'');
+      logPushStyled(roleTag + p.name + ' ' + la, 'entry-action');
+    }
   }
 }
 
@@ -1831,9 +1825,9 @@ document.getElementById('settingsBtn').onclick = function(){
 };
 document.getElementById('settingSpeed').onchange = function(){
   const SPEEDS=[
-    {label:'极速 ⚡',minThink:30,maxThink:100,noVoice:true},
-    {label:'快速',minThink:900,maxThink:1400,waitVoice:true},
-    {label:'普通（默认）',minThink:2500,maxThink:4000,waitVoice:true},
+    {label:'极速 (~50ms)',minThink:30,maxThink:100,noVoice:true},
+    {label:'快速 (~1s)',minThink:900,maxThink:1400,waitVoice:true},
+    {label:'普通 (~3s)',minThink:2500,maxThink:4000,waitVoice:true},
     {label:'慢速 🐢',minThink:4500,maxThink:7000,waitVoice:true},
   ];
   const s=SPEEDS[Number(this.value)];
