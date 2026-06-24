@@ -390,7 +390,7 @@
 <body>
 
 <div id="setup">
-  <h1 data-i18n="setupTitle"><span class="display">德州扑克 · 自建牌桌</span></h1>
+  <h1 data-i18n="setupTitle">德州扑克 · 自建牌桌</h1>
   <p class="sub" data-i18n="setupSub"></p>
 
   <div class="field">
@@ -412,8 +412,8 @@
   <div class="field">
     <label data-i18n="nickName"></label>
     <div class="name-inputs">
-      <input type="text" id="nameInput1" placeholder="玩家1" maxlength="10">
-      <input type="text" id="nameInput2" placeholder="玩家2" maxlength="10">
+      <input type="text" id="nameInput1" placeholder="玩家1" maxlength="12">
+      <input type="text" id="nameInput2" placeholder="玩家2" maxlength="12">
     </div>
   </div>
 
@@ -481,7 +481,33 @@
         <option value="0">极速 (~50ms)</option>
         <option value="1" selected>快速 (~1s)</option>
         <option value="2">普通 (~3s)</option>
-        <option value="3">慢速 (~5s)'settingsPanel').classList.remove('show')">关闭</button>
+        <option value="3">慢速 (~5s)</option>
+      </select>
+    </label>
+    <label class="setting-row">
+      <span>语音播报</span>
+      <select id="settingVoice">
+        <option value="0">开启</option>
+        <option value="1">关闭</option>
+      </select>
+    </label>
+    <label class="setting-row">
+      <span>音效/音乐</span>
+      <select id="settingSFX">
+        <option value="0">开启</option>
+        <option value="1">关闭</option>
+      </select>
+    </label>
+    <label class="setting-row">
+      <span>语言 / Language / 言語</span>
+      <select id="settingLang">
+        <option value="zh-CN">中文</option>
+        <option value="en">English</option>
+        <option value="ja">日本語</option>
+      </select>
+    </label>
+  </div>
+  <button class="settings-close" onclick="document.getElementById('settingsPanel').classList.remove('show')">关闭</button>
 </div>
 
 <div id="privacyGate">
@@ -525,6 +551,7 @@ const LANG_DATA = {
     potOdds: '底池赔率', suggest: '建议',
     settings: '⚙️ 设置', restart: '重新开局', pause: '⏸️ 暂停', resume: '▶️ 恢复',
     paused: '游戏已暂停', pausedSub: '点击"恢复"继续游戏',
+    hand: '第',
     nextHand: '开始下一手', gameOver: '本局结束', backToSetup: '回到设置界面',
     speedLabel: {label:'极速 (~50ms)',minThink:30,maxThink:100,noVoice:true}, // handled separately
   },
@@ -547,6 +574,7 @@ const LANG_DATA = {
     potOdds: 'Pot odds', suggest: 'Advice',
     settings: '⚙️ Settings', restart: 'Restart', pause: '⏸️ Pause', resume: '▶️ Resume',
     paused: 'Game Paused', pausedSub: 'Click "Resume" to continue',
+    hand: 'Hand',
     nextHand: 'Next Hand', gameOver: 'Game Over', backToSetup: 'Back to Setup',
   },
   'ja': {
@@ -568,12 +596,19 @@ const LANG_DATA = {
     potOdds: 'ポットオッズ', suggest: 'アドバイス',
     settings: '⚙️ 設定', restart: '再開', pause: '⏸️ 一時停止', resume: '▶️ 再開',
     paused: 'ゲーム一時停止', pausedSub: '"再開"をクリック',
+    hand: '手',
     nextHand: '次のハンド', gameOver: 'ゲーム終了', backToSetup: '設定に戻る',
   },
 };
 let currentLang = 'zh-CN';
 function T(key){ return (LANG_DATA[currentLang]&&LANG_DATA[currentLang][key]) || (LANG_DATA['zh-CN'][key]) || key; }
 function applyLanguage(){
+  document.documentElement.lang=currentLang;
+  // Update game stage if visible
+  const stageNames={preflop:T('stage_preflop'),flop:T('stage_flop'),turn:T('stage_turn'),river:T('stage_river'),showdown:T('stage_showdown')};
+  const sl=document.getElementById('stageLabel'); if(sl) sl.textContent=stageNames[game&&game.stage]||'';
+  const hn=document.getElementById('handCounter'); if(hn&&game) hn.textContent=`${T('hand')} ${game.handCount}`;
+
   // Update all translatable elements
   document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = T(el.getAttribute('data-i18n')));
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => el.placeholder = T(el.getAttribute('data-i18n-placeholder')));
@@ -1340,6 +1375,7 @@ function formatBB(x){
 
 function renderAll(){
   document.getElementById('handCounter').textContent = `第 ${game.handCount} 手`;
+  applyLanguage();
   document.getElementById('blindsLabel').textContent = `盲注 ${game.smallBlind}/${game.bigBlind}`;
   const potTotal = game.totalPot();
   document.getElementById('potAmount').textContent = potTotal;
@@ -1969,6 +2005,7 @@ buildHandRankPanel();
 if(window.innerWidth<900) document.getElementById('handRankPanel').classList.add('hidden');
 
 buildSetupUI();
+applyLanguage();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
