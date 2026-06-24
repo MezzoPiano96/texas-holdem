@@ -987,41 +987,49 @@ const SFX = (() => {
 // ============================================================
 const VOICE = (() => {
   let muted=false;
-  const PHRASES = { fold:'Fold', check:'Check', call:'Call', bet:'Bet', raise:'Raise!', allin:'All in!' };
-  let preferredVoice=null;
-  function pickVoice(){
-    if(!('speechSynthesis' in window)) return;
-    const voices=speechSynthesis.getVoices();
-    preferredVoice = voices.find(v=>v.lang && v.lang.startsWith('en')) || voices[0] || null;
+  const CACHE = new Map();
+  let ctx=null;
+  function ensureCtx(){
+    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
+    if(ctx.state==='suspended') ctx.resume();
+    return ctx;
   }
-  if('speechSynthesis' in window){
-    pickVoice();
-    speechSynthesis.onvoiceschanged = pickVoice;
+  function buf(actionType){
+    if(CACHE.has(actionType)) return CACHE.get(actionType);
+    const p = fetch(`sfx/voice/${actionType}.mp3`)
+      .then(r=>r.arrayBuffer())
+      .then(b=>ensureCtx().decodeAudioData(b))
+      .catch(()=>{ CACHE.delete(actionType); });
+    CACHE.set(actionType, p);
+    return p;
   }
   function speak(actionType, equity){
-    if(muted || !('speechSynthesis' in window)) return;
-    const text = PHRASES[actionType];
-    if(!text) return;
-    speechSynthesis.cancel(); // 避免好几个AI连续行动时语音排队堆积、跟不上画面
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang='en-US';
-    if(preferredVoice) utter.voice=preferredVoice;
-    if(equity!=null){
-      const c=Math.max(0, Math.min(1, equity)); // 信心0~1
-      utter.rate = 0.85 + c*0.45;    // 越自信说得越快
-      utter.volume = 0.55 + c*0.45;  // 越自信说得越响
-      utter.pitch = 1.15 - c*0.3;    // 越自信声音越沉，越犹豫越上扬
-    } else {
-      utter.rate=1; utter.volume=0.85; utter.pitch=1;
-    }
-    speechSynthesis.speak(utter);
+    if(muted) return;
+    const textMap = { fold:'Fold', check:'Check', call:'Call', bet:'Bet', raise:'Raise', allin:'All in' };
+    if(!textMap[actionType]) return;
+    buf(actionType).then(buffer=>{
+      if(!buffer) return;
+      const c=ensureCtx();
+      const source=c.createBufferSource();
+      source.buffer=buffer;
+      const gain=c.createGain();
+      if(equity!=null){
+        const cc=Math.max(0, Math.min(1, equity));
+        source.playbackRate.value = 0.85 + cc*0.45;
+        gain.gain.value = 0.55 + cc*0.45;
+      } else {
+        source.playbackRate.value = 1;
+        gain.gain.value = 0.85;
+      }
+      source.connect(gain).connect(c.destination);
+      source.start();
+    }).catch(()=>{});
   }
   return {
     speak,
     isMuted(){ return muted; },
     toggleMute(){
       muted=!muted;
-      if(muted && 'speechSynthesis' in window) speechSynthesis.cancel();
       return muted;
     },
   };
