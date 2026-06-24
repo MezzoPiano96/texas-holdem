@@ -345,16 +345,15 @@
   .hr-name{font-size:12.5px;font-weight:700;color:var(--cream);}
   .hr-desc{font-size:11px;color:var(--muted);line-height:1.4;}
 
-  /* ---------- 音效/音乐/语音开关 ---------- */
-  .audio-toggle{
-    position:fixed;bottom:calc(16px + env(safe-area-inset-bottom));left:calc(16px + env(safe-area-inset-left));z-index:25;
-    background:#16302554;border:1px solid #2c5345;color:var(--cream);
-    padding:8px 14px;border-radius:999px;cursor:pointer;font-size:12px;
-    backdrop-filter:blur(2px);
-  }
-  .audio-toggle:hover{border-color:var(--gold);}
-  .voice-toggle{bottom:calc(58px + env(safe-area-inset-bottom));}
 
+  
+  /* ---------- 暂停覆盖 ---------- */
+  #pauseOverlay{display:none;position:fixed;inset:0;z-index:90;
+    background:rgba(4,9,7,.88);align-items:center;justify-content:center;
+    flex-direction:column;gap:20px;backdrop-filter:blur(4px);}
+  #pauseOverlay.show{display:flex;}
+  #pauseOverlay .pause-title{font-size:36px;color:var(--gold-bright);font-weight:700;letter-spacing:2px;}
+  #pauseOverlay .pause-sub{font-size:14px;color:var(--muted);}
   /* ---------- 游戏设置面板 ---------- */
   .settings-panel{
     display:none;position:fixed;inset:0;z-index:100;
@@ -391,27 +390,27 @@
 <body>
 
 <div id="setup">
-  <h1>德州扑克 <span class="display">自建牌桌</span></h1>
-  <p class="sub">选择人数和你想操控的 1-2 个座位，开局后由你操作所选座位，其余为AI对手。选择两个座位时会开启同屏轮流隐私模式，双方互不偷看手牌。</p>
+  <h1 data-i18n="setupTitle"><span class="display">德州扑克 · 自建牌桌</span></h1>
+  <p class="sub" data-i18n="setupSub"></p>
 
   <div class="field">
-    <label>桌上人数</label>
+    <label data-i18n="playerCount"></label>
     <div class="pill-row" id="countPicker"></div>
   </div>
 
   <div class="field">
-    <label>你控制哪些座位（1-2 个）</label>
+    <label data-i18n="selectSeats"></label>
     <div class="pill-row seat-pick" id="seatPicker"></div>
     <div class="hint" id="seatHint">已选 0 个，请选择 1-2 个座位</div>
   </div>
 
   <div class="field">
-    <label>起始筹码 / 盲注</label>
+    <label data-i18n="stackBlinds"></label>
     <div class="pill-row" id="stackPicker"></div>
   </div>
 
   <div class="field">
-    <label>玩家昵称（可选，用于记分，最多10个英文字符或等效宽度的中文）</label>
+    <label data-i18n="nickName"></label>
     <div class="name-inputs">
       <input type="text" id="nameInput1" placeholder="玩家1" maxlength="10">
       <input type="text" id="nameInput2" placeholder="玩家2" maxlength="10">
@@ -419,7 +418,7 @@
   </div>
 
   <div class="field">
-    <label>你的语音</label>
+    <label data-i18n="yourVoice"></label>
     <div class="pill-row">
       <div class="pill active" id="genderMaleBtn">男声 🧑</div>
       <div class="pill" id="genderFemaleBtn">女声 👩</div>
@@ -427,19 +426,19 @@
   </div>
 
   <div class="field">
-    <label>游戏速度（AI思考时间）</label>
+    <label data-i18n="gameSpeed"></label>
     <div class="pill-row" id="speedPicker"></div>
   </div>
 
-  <button id="startBtn" disabled>开始游戏</button>
+  <button id="startBtn" disabled data-i18n="startGame"></button>
 </div>
 
 <div id="game">
   <div class="topbar">
     <h2>德州扑克 · <span class="display" id="handCounter">第 1 手</span><span class="blinds-label" id="blindsLabel"></span><span class="game-timer" id="gameTimer"></span></h2>
     <div class="btns">
-      <button id="settingsBtn">⚙️ 设置</button>
-      <button id="restartBtn">重新开局</button>
+      <button id="settingsBtn" data-i18n="settings"></button><button id="pauseBtn" data-i18n="pause"></button>
+      <button id="restartBtn" data-i18n="restart"></button>
     </div>
   </div>
 
@@ -499,10 +498,87 @@
   <ol class="hr-list" id="handRankList"></ol>
 </div>
 
-<button id="audioToggle" class="audio-toggle">🔊 声音</button>
-<button id="voiceToggle" class="audio-toggle voice-toggle">🗣️ 语音播报</button>
+
 
 <script>
+
+// ============================================================
+// 国际化（简体中文 / English / 日本語）
+// ============================================================
+const LANG_DATA = {
+  'zh-CN': {
+    setupTitle: '德州扑克', setupSub: '选择人数和你想操控的 1-2 个座位，开局后由你操作所选座位，其余为AI对手。选择两个座位时会开启同屏轮流隐私模式，双方互不偷看手牌。',
+    playerCount: '桌上人数', selectSeats: '你控制哪些座位（1-2 个）', stackBlinds: '起始筹码 / 盲注',
+    nickName: '玩家昵称（可选，用于记分，最多12个英文字符或等效宽度的中文）',
+    yourVoice: '你的语音', maleVoice: '男声 🧑', femaleVoice: '女声 👩',
+    gameSpeed: '游戏速度（AI思考时间）',
+    startGame: '开始游戏', seat: '座位', emptySeat: '空座位', selected: '已选',
+    singleMode: '个座位 · 单人模式', privacyMode: '个座位 · 将开启同屏轮流隐私模式（双方互不偷看手牌）',
+    selectHint: '个，请选择 1-2 个座位',
+    fold: '弃牌', check: '过牌', call: '跟注', raise: '加注到', allin: '全下',
+    pot: '底池', chips: '筹码', stage_preflop: '翻牌前', stage_flop: '翻牌',
+    stage_turn: '转牌', stage_river: '河牌', stage_showdown: '摊牌',
+    blinds: '盲注', bigBlind: '大盲', smallBlind: '小盲',
+    dealer: '庄家', you: '你', waiting: '等待你操作…', thinking: '思考中…',
+    win: '赢得', pot_won: '获得彩池', all_others_fold: '（其余玩家已弃牌）',
+    aiAssist: '💡 AI辅助', handType: '牌型', opponents: '剩余对手', equity_sim: '模拟胜率',
+    potOdds: '底池赔率', suggest: '建议',
+    settings: '⚙️ 设置', restart: '重新开局', pause: '⏸️ 暂停', resume: '▶️ 恢复',
+    paused: '游戏已暂停', pausedSub: '点击"恢复"继续游戏',
+    nextHand: '开始下一手', gameOver: '本局结束', backToSetup: '回到设置界面',
+    speedLabel: {label:'极速 (~50ms)',minThink:30,maxThink:100,noVoice:true}, // handled separately
+  },
+  'en': {
+    setupTitle: "Texas Hold'em", setupSub: 'Choose 1-2 seats to control. Others are AI. Selecting 2 seats enables privacy mode so two players can share one screen.',
+    playerCount: 'Players', selectSeats: 'Your seats (1-2)', stackBlinds: 'Stack / Blinds',
+    nickName: 'Nickname (optional, max 12 English chars or equivalent)',
+    yourVoice: 'Your Voice', maleVoice: 'Male 🧑', femaleVoice: 'Female 👩',
+    gameSpeed: 'Game Speed (AI think time)',
+    startGame: 'Start Game', seat: 'Seat', emptySeat: 'Empty', selected: 'Selected',
+    singleMode: ' seat · Solo', privacyMode: ' seats · Privacy mode (hide cards from each other)',
+    selectHint: ' seats, choose 1-2',
+    fold: 'Fold', check: 'Check', call: 'Call', raise: 'Raise to', allin: 'All in',
+    pot: 'Pot', chips: 'Chips', stage_preflop: 'Pre-Flop', stage_flop: 'Flop',
+    stage_turn: 'Turn', stage_river: 'River', stage_showdown: 'Showdown',
+    blinds: 'Blinds', bigBlind: 'BB', smallBlind: 'SB',
+    dealer: 'D', you: 'You', waiting: 'Waiting for you…', thinking: 'thinking…',
+    win: 'wins', pot_won: 'wins pot', all_others_fold: ' (all others folded)',
+    aiAssist: '💡 AI Assist', handType: 'Hand', opponents: 'Opponents left', equity_sim: 'Win prob.',
+    potOdds: 'Pot odds', suggest: 'Advice',
+    settings: '⚙️ Settings', restart: 'Restart', pause: '⏸️ Pause', resume: '▶️ Resume',
+    paused: 'Game Paused', pausedSub: 'Click "Resume" to continue',
+    nextHand: 'Next Hand', gameOver: 'Game Over', backToSetup: 'Back to Setup',
+  },
+  'ja': {
+    setupTitle: 'テキサスホールデム', setupSub: '操作する席を1-2つ選んでください。2席選択するとプライバシーモードが有効になります。',
+    playerCount: 'プレイヤー数', selectSeats: '操作する席（1-2）', stackBlinds: 'スタック / ブラインド',
+    nickName: 'ニックネーム（任意、最大12英文字相当）',
+    yourVoice: '音声の性別', maleVoice: '男性 🧑', femaleVoice: '女性 👩',
+    gameSpeed: 'ゲーム速度（AI思考時間）',
+    startGame: 'ゲーム開始', seat: '席', emptySeat: '空席', selected: '選択済',
+    singleMode: '席 · シングル', privacyMode: '席 · プライバシーモード（お互いの手札を隠す）',
+    selectHint: '席、1-2を選択',
+    fold: 'フォールド', check: 'チェック', call: 'コール', raise: 'レイズ', allin: 'オールイン',
+    pot: 'ポット', chips: 'チップ', stage_preflop: 'プリフロップ', stage_flop: 'フロップ',
+    stage_turn: 'ターン', stage_river: 'リバー', stage_showdown: 'ショーダウン',
+    blinds: 'ブラインド', bigBlind: 'BB', smallBlind: 'SB',
+    dealer: 'D', you: 'あなた', waiting: 'あなたの番です…', thinking: '考え中…',
+    win: '勝利', pot_won: 'ポット獲得', all_others_fold: '（他はフォールド）',
+    aiAssist: '💡 AIアシスト', handType: 'ハンド', opponents: '残り対戦者', equity_sim: '勝率',
+    potOdds: 'ポットオッズ', suggest: 'アドバイス',
+    settings: '⚙️ 設定', restart: '再開', pause: '⏸️ 一時停止', resume: '▶️ 再開',
+    paused: 'ゲーム一時停止', pausedSub: '"再開"をクリック',
+    nextHand: '次のハンド', gameOver: 'ゲーム終了', backToSetup: '設定に戻る',
+  },
+};
+let currentLang = 'zh-CN';
+function T(key){ return (LANG_DATA[currentLang]&&LANG_DATA[currentLang][key]) || (LANG_DATA['zh-CN'][key]) || key; }
+function applyLanguage(){
+  // Update all translatable elements
+  document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = T(el.getAttribute('data-i18n')));
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => el.placeholder = T(el.getAttribute('data-i18n-placeholder')));
+}
+
 // ============================================================
 // 1. 牌型评估引擎（已在 Node 中通过 2000 手自动测试）
 // ============================================================
@@ -1670,7 +1746,7 @@ function buildSetupUI(){
     b.textContent=s.label;
     b.onclick=()=>{
       gameSpeed=s;
-      if(s.noVoice && !VOICE.isMuted()) document.getElementById('voiceToggle').click(); // 极速自动关语音
+      if(s.noVoice && !VOICE.isMuted()) VOICE.toggleMute(); // 极速自动关语音
       [...spEl.children].forEach(c=>c.classList.remove('active'));
       b.classList.add('active');
     };
@@ -1678,7 +1754,7 @@ function buildSetupUI(){
   });
 }
 function refreshCountUI(){
-  [...document.getElementById('countPicker').children].forEach((c,i)=>c.classList.toggle('active', i+5===chosenCount));
+  [...document.getElementById('countPicker').children].forEach((c,i)=>c.classList.toggle('active', i+2===chosenCount));
 }
 function buildSeatPicker(){
   const seatPicker=document.getElementById('seatPicker');
@@ -1762,7 +1838,7 @@ function onGameUpdate(type, payload){
     actingSeatId=payload;
     renderAll();
     if(payload>=0 && game.players[payload].isHuman) {
-      VOICE.speak('your_turn', null, genderForPlayer(game.players[payload]), game.players[payload].name);
+      if(!gamePaused) VOICE.speak('your_turn', null, genderForPlayer(game.players[payload]), game.players[payload].name);
     }
   }
   else if(type==='newhand'){ const hp=game.players.find(p=>p.isHuman)||game.players[0]; VOICE.speak('new_hand',null,genderForPlayer(hp),hp.name); }
@@ -1836,12 +1912,27 @@ document.getElementById('settingSpeed').onchange = function(){
 document.getElementById('settingVoice').onchange = function(){
   const muted=this.value==='1';
   if(VOICE.isMuted()!==muted) VOICE.toggleMute();
-  document.getElementById('voiceToggle').textContent = muted ? '🔇 语音播报已关' : '🗣️ 语音播报';
+  
 };
 document.getElementById('settingSFX').onchange = function(){
+document.getElementById('settingLang').onchange = function(){
+  currentLang = this.value;
+  applyLanguage();
+  // Rebuild dynamic elements
+  if(game) renderAll();
+  if(typeof buildSetupUI === 'function' && document.getElementById('setup').style.display!=='none') location.reload();
+};
   const muted=this.value==='1';
   if(SFX.isMuted()!==muted){ SFX.toggleMute(); }
-  document.getElementById('audioToggle').textContent = muted ? '🔇 静音' : '🔊 声音';
+  
+};
+
+let gamePaused=false;
+document.getElementById('pauseBtn').onclick = function(){
+  gamePaused=!gamePaused;
+  this.textContent = gamePaused ? '▶️ 恢复' : '⏸️ 暂停';
+  if(gamePaused){ document.getElementById('pauseOverlay').classList.add('show'); }
+  else{ document.getElementById('pauseOverlay').classList.remove('show'); renderAll(); }
 };
 
 document.getElementById('restartBtn').onclick = function(){
@@ -1850,16 +1941,6 @@ document.getElementById('restartBtn').onclick = function(){
 
 window.addEventListener('resize', ()=>{ if(game) renderAll(); });
 
-document.getElementById('audioToggle').onclick = function(){
-  audioStarted=true;
-  SFX.init();
-  const muted=SFX.toggleMute();
-  this.textContent = muted ? '🔇 静音' : '🔊 声音';
-};
-document.getElementById('voiceToggle').onclick = function(){
-  const muted=VOICE.toggleMute();
-  this.textContent = muted ? '🔇 语音播报已关' : '🗣️ 语音播报';
-};
 
 const HAND_DESCRIPTIONS = [
   '5张互不相关的牌，比最大的单张',

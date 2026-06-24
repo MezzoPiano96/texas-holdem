@@ -214,12 +214,7 @@
   .hr-name{font-size:12.5px;font-weight:700;color:var(--cream);}
   .hr-desc{font-size:11px;color:var(--muted);line-height:1.4;}
 
-  .audio-toggle{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom));left:calc(16px + env(safe-area-inset-left));z-index:25;
-    background:#16302554;border:1px solid #2c5345;color:var(--cream);
-    padding:8px 14px;border-radius:999px;cursor:pointer;font-size:12px;backdrop-filter:blur(2px);}
-  .audio-toggle:hover{border-color:var(--gold);}
-  .voice-toggle{bottom:calc(58px + env(safe-area-inset-bottom));}
-  .gender-toggle{bottom:calc(100px + env(safe-area-inset-bottom));}
+
 
   @media (max-width:900px){
     .hand-rank-panel{top:auto;bottom:calc(60px + env(safe-area-inset-bottom));left:calc(10px + env(safe-area-inset-left));right:calc(10px + env(safe-area-inset-right));width:auto;max-height:38vh;}
@@ -319,9 +314,9 @@
   <ol class="hr-list" id="handRankList"></ol>
 </div>
 
-<button id="audioToggle" class="audio-toggle">🔊 声音</button>
-<button id="voiceToggle" class="audio-toggle voice-toggle">🗣️ 语音播报</button>
-<button id="genderToggle" class="audio-toggle gender-toggle">🧑 男声</button>
+
+
+<div id="pauseOverlay"><div class="pause-title">⏸️ 游戏已暂停</div><div class="pause-sub">点击"恢复"继续游戏</div></div>
 
 <script>
 // ============================================================
@@ -1204,19 +1199,17 @@ document.getElementById('logToggle').onclick = function(){
 // ============================================================
 // 音效开关 + 牌型表
 // ============================================================
-document.getElementById('audioToggle').onclick = function(){
-  audioStarted=true; SFX.init();
-  const m=SFX.toggleMute();
-  this.textContent = m ? '🔇 静音' : '🔊 声音';
+
+let gamePaused=false;
+try{
+document.getElementById('pauseBtn').onclick = function(){
+  gamePaused=!gamePaused;
+  this.textContent = gamePaused ? '▶️ 恢复' : '⏸️ 暂停';
+  if(gamePaused){ document.getElementById('pauseOverlay').classList.add('show'); }
+  else{ document.getElementById('pauseOverlay').classList.remove('show'); if(gameState) renderGame(); }
 };
-document.getElementById('voiceToggle').onclick = function(){
-  const m=VOICE.toggleMute();
-  this.textContent = m ? '🔇 语音播报已关' : '🗣️ 语音播报';
-};
-document.getElementById('genderToggle').onclick = function(){
-  playerGender=playerGender==='m'?'f':'m';
-  this.textContent = playerGender==='m' ? '🧑 男声' : '👩 女声';
-};
+}catch(e){}
+
 document.getElementById('handRankToggle').onclick = function(){
   document.getElementById('handRankPanel').classList.toggle('hidden');
 };
