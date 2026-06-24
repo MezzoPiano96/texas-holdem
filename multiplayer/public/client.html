@@ -522,6 +522,12 @@ const VOICE = (() => {
     return ctx;
   }
   function url(base,g){ return `sfx/voice/${base}_${g}.mp3`; }
+  let useTTSFallback=false;
+  const TTS_TEXT = { fold:'Fold', check:'Check', call:'Call', bet:'Bet', raise:'Raise!', allin:'All in!',
+    your_turn:'Your turn', new_hand:'New hand', winner:'Winner!', flop:'Flop',
+    turn_card:'Turn card', river:'River', showdown:'Showdown',
+    small_blind:'Small blind', big_blind:'Big blind',
+  };
   function getBuffer(base,g){
     const key=base+'_'+g;
     if(CACHE.has(key)) return CACHE.get(key);
@@ -529,34 +535,27 @@ const VOICE = (() => {
     CACHE.set(key,p);
     return p;
   }
+  function speakTTS(actionType, equity, playerName){
+    const text=TTS_TEXT[actionType]; if(!text||!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const utter=new SpeechSynthesisUtterance(text); utter.lang='en-US';
+    const pOff=pitchOffsetFor(playerName);
+    if(equity!=null){ const cc=Math.max(0,Math.min(1,equity)); utter.rate=0.85+cc*0.45; utter.volume=0.55+cc*0.45; utter.pitch=(1.15-cc*0.3)+pOff*0.5; }
+    else{ utter.rate=1; utter.volume=0.85; utter.pitch=1+pOff*0.5; }
+    speechSynthesis.speak(utter);
+  }
   function speakNow(base, g, equity, playerName){
+    if(useTTSFallback){ speakTTS(base, equity, playerName); return; }
     getBuffer(base,g).then(buffer=>{
-      if(!buffer || muted) return;
-      const c=ensureCtx();
-      const source=c.createBufferSource();
-      source.buffer=buffer;
-      const gain=c.createGain();
-      const pOff = pitchOffsetFor(playerName);
-      if(equity!=null){
-        const cc=Math.max(0, Math.min(1, equity));
-        source.playbackRate.value = (0.85 + cc*0.45) * (1 + pOff*0.3);
-        gain.gain.value = 0.55 + cc*0.45;
-      } else {
-        source.playbackRate.value = 1 * (1 + pOff*0.3);
-        gain.gain.value = 0.85;
-      }
-      source.detune.value = pOff * 200;
-      source.connect(gain).connect(c.destination);
-      speaking=true;
-      source.onended = ()=>{
-        speaking=false;
-        if(pending && !muted){
-          const n=pending; pending=null;
-          speakNow(n.base, n.g, n.equity, n.name);
-        }
-      };
+      if(!buffer||muted){ if(!buffer&&!useTTSFallback){ useTTSFallback=true; speakTTS(base, equity, playerName); } return; }
+      const c=ensureCtx(); const source=c.createBufferSource(); source.buffer=buffer; const gain=c.createGain();
+      const pOff=pitchOffsetFor(playerName);
+      if(equity!=null){ const cc=Math.max(0,Math.min(1,equity)); source.playbackRate.value=(0.85+cc*0.45)*(1+pOff*0.3); gain.gain.value=0.55+cc*0.45; }
+      else{ source.playbackRate.value=1*(1+pOff*0.3); gain.gain.value=0.85; }
+      source.detune.value=pOff*200; source.connect(gain).connect(c.destination);
+      speaking=true; source.onended=()=>{ speaking=false; if(pending&&!muted){ const n=pending; pending=null; speakNow(n.base,n.g,n.equity,n.name); } };
       source.start();
-    }).catch(()=>{});
+    }).catch(()=>{ if(!useTTSFallback){ useTTSFallback=true; speakTTS(base, equity, playerName); } });
   }
   function speak(actionType, equity, gender, playerName){
     if(muted) return;

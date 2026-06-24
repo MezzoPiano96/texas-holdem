@@ -205,11 +205,6 @@
   .role-tag.sb{background:#3a6ea5;color:#fff;}
   .role-tag.bb{background:var(--red);color:#fff;}
   .seat-stack{font-size:0.92em;color:var(--gold-bright);margin-top:0.15em;display:flex;align-items:center;gap:0.3em;flex-wrap:wrap;justify-content:center;}
-  .chip-dots{display:flex;gap:2px;align-items:center;}
-  .chip-dot{width:0.55em;height:0.55em;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,.15);flex-shrink:0;}
-  .chip-dot.c1{background:#c9a24b;}  .chip-dot.c2{background:#3a6ea5;}  .chip-dot.c3{background:#b5402f;}
-  .chip-dot.c4{background:#3f8f5f;}  .chip-dot.c5{background:#9fb8ac;}
-  .allin-badge{font-size:0.65em;background:var(--danger);color:#fff;padding:0.04em 0.35em;border-radius:0.3em;letter-spacing:.5px;}
   .seat-cards{display:flex;gap:0.3em;justify-content:center;margin-top:0.46em;}
   .seat-action{
     margin-top:0.38em;font-size:0.85em;color:var(--muted);
@@ -359,6 +354,22 @@
   .audio-toggle:hover{border-color:var(--gold);}
   .voice-toggle{bottom:calc(58px + env(safe-area-inset-bottom));}
 
+  /* ---------- 游戏设置面板 ---------- */
+  .settings-panel{
+    display:none;position:fixed;inset:0;z-index:100;
+    background:rgba(4,9,7,.85);align-items:center;justify-content:center;
+    padding:20px;backdrop-filter:blur(3px);
+  }
+  .settings-panel.show{display:flex;}
+  .settings-panel .settings-title{font-size:20px;color:var(--gold-bright);font-weight:700;margin-bottom:20px;text-align:center;}
+  .settings-panel .settings-section{background:rgba(10,20,16,.92);border:1px solid #2c5345;border-radius:14px;padding:20px 24px;max-width:360px;width:100%;}
+  .setting-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px dashed #18301f;font-size:14px;}
+  .setting-row:last-child{border:none;}
+  .setting-row select{padding:6px 10px;border-radius:6px;border:1px solid #2c5345;background:#0f241c;color:var(--cream);font-size:13px;}
+  .setting-row select:focus{outline:none;border-color:var(--gold);}
+  .settings-close{display:block;margin:16px auto 0;padding:10px 34px;border:none;border-radius:10px;cursor:pointer;
+    background:linear-gradient(180deg,var(--gold-bright),var(--gold));color:var(--ink);font-weight:700;font-size:14px;}
+
   @media (max-width:900px){
     .hand-rank-panel{top:auto;bottom:calc(60px + env(safe-area-inset-bottom));left:calc(10px + env(safe-area-inset-left));right:calc(10px + env(safe-area-inset-right));width:auto;max-height:38vh;}
     .hand-rank-toggle{top:calc(10px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));padding:7px 11px;font-size:11px;}
@@ -383,7 +394,7 @@
   <p class="sub">选择人数和你想操控的 1-2 个座位，开局后由你操作所选座位，其余为AI对手。选择两个座位时会开启同屏轮流隐私模式，双方互不偷看手牌。</p>
 
   <div class="field">
-    <label>桌上人数（5-10）</label>
+    <label>桌上人数（2-9，标准德州人数）</label>
     <div class="pill-row" id="countPicker"></div>
   </div>
 
@@ -426,7 +437,7 @@
   <div class="topbar">
     <h2>德州扑克 · <span class="display" id="handCounter">第 1 手</span><span class="blinds-label" id="blindsLabel"></span></h2>
     <div class="btns">
-      <button id="logToggle">显示日志</button>
+      <button id="settingsBtn">⚙️ 设置</button>
       <button id="restartBtn">重新开局</button>
     </div>
   </div>
@@ -458,7 +469,37 @@
 
   <div id="nextHandBar"><button id="nextHandBtn">开始下一手</button></div>
 
-  <div id="logPanel" style="display:none;"></div>
+  <div id="logPanel"></div>
+</div>
+
+<div id="settingsPanel" class="settings-panel">
+  <div class="settings-title">游戏设置</div>
+  <div class="settings-section">
+    <label class="setting-row">
+      <span>游戏速度</span>
+      <select id="settingSpeed">
+        <option value="0">极速 ⚡</option>
+        <option value="1" selected>快速</option>
+        <option value="2">普通（默认）</option>
+        <option value="3">慢速 🐢</option>
+      </select>
+    </label>
+    <label class="setting-row">
+      <span>语音播报</span>
+      <select id="settingVoice">
+        <option value="0">开启</option>
+        <option value="1">关闭</option>
+      </select>
+    </label>
+    <label class="setting-row">
+      <span>音效/音乐</span>
+      <select id="settingSFX">
+        <option value="0">开启</option>
+        <option value="1">关闭</option>
+      </select>
+    </label>
+  </div>
+  <button class="settings-close" onclick="document.getElementById('settingsPanel').classList.remove('show')">关闭</button>
 </div>
 
 <div id="privacyGate">
@@ -1070,6 +1111,12 @@ const VOICE = (() => {
     return ctx;
   }
   function url(base,g){ return `sfx/voice/${base}_${g}.mp3`; }
+  let useTTSFallback=false; // 如果MP3文件加载失败（如本地file://访问），回退到浏览器自带TTS
+  const TTS_TEXT = { fold:'Fold', check:'Check', call:'Call', bet:'Bet', raise:'Raise!', allin:'All in!',
+    your_turn:'Your turn', new_hand:'New hand', winner:'Winner!', flop:'Flop',
+    turn_card:'Turn card', river:'River', showdown:'Showdown',
+    small_blind:'Small blind', big_blind:'Big blind',
+  };
   function getBuffer(base,g){
     const key=base+'_'+g;
     if(CACHE.has(key)) return CACHE.get(key);
@@ -1077,9 +1124,27 @@ const VOICE = (() => {
     CACHE.set(key,p);
     return p;
   }
+  function speakTTS(actionType, equity, playerName){
+    const text=TTS_TEXT[actionType];
+    if(!text || !('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const utter=new SpeechSynthesisUtterance(text);
+    utter.lang='en-US';
+    const pOff=pitchOffsetFor(playerName);
+    if(equity!=null){
+      const cc=Math.max(0,Math.min(1,equity));
+      utter.rate=0.85+cc*0.45;
+      utter.volume=0.55+cc*0.45;
+      utter.pitch=(1.15-cc*0.3)+pOff*0.5;
+    }else{
+      utter.rate=1; utter.volume=0.85; utter.pitch=1+pOff*0.5;
+    }
+    speechSynthesis.speak(utter);
+  }
   function speakNow(base, g, equity, playerName){
+    if(useTTSFallback){ speakTTS(base, equity, playerName); return; }
     getBuffer(base,g).then(buffer=>{
-      if(!buffer || muted) return;
+      if(!buffer || muted){ if(!buffer && !useTTSFallback){ useTTSFallback=true; speakTTS(base, equity, playerName); } return; }
       const c=ensureCtx();
       const source=c.createBufferSource();
       source.buffer=buffer;
@@ -1093,20 +1158,15 @@ const VOICE = (() => {
         source.playbackRate.value = 1 * (1 + pOff*0.3);
         gain.gain.value = 0.85;
       }
-      // 给同性别不同玩家再加一点音高偏移（不影响语速）
-      source.detune.value = pOff * 200; // 音分偏移，±20音分
+      source.detune.value = pOff * 200;
       source.connect(gain).connect(c.destination);
       speaking=true;
       source.onended = ()=>{
         speaking=false;
-        if(pending && !muted){
-          const n=pending;
-          pending=null;
-          speakNow(n.base, n.g, n.equity, n.name);
-        }
+        if(pending && !muted){ const n=pending; pending=null; speakNow(n.base, n.g, n.equity, n.name); }
       };
       source.start();
-    }).catch(()=>{});
+    }).catch(()=>{ if(!useTTSFallback){ useTTSFallback=true; speakTTS(base, equity, playerName); } });
   }
   function speak(actionType, equity, gender, playerName){
     if(muted) return;
@@ -1219,20 +1279,6 @@ function formatBB(x){
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-function chipDots(stack, bb){
-  if(stack<=0) return '';
-  const n=Math.min(stack, Math.max(2, Math.floor(stack/bb)*2));
-  const maxDots=10;
-  const count=Math.min(maxDots, Math.max(1, Math.ceil(n/3)));
-  let html='';
-  for(let i=0;i<count;i++){
-    const ci=i%5;
-    html+=`<span class="chip-dot c${ci+1}"></span>`;
-  }
-  if(count>=maxDots && stack>bb*maxDots) html+='<span style="font-size:0.5em;color:var(--muted)">+</span>';
-  return html;
-}
-
 function renderAll(){
   document.getElementById('handCounter').textContent = `第 ${game.handCount} 手`;
   document.getElementById('blindsLabel').textContent = `盲注 ${game.smallBlind}/${game.bigBlind}`;
@@ -1298,7 +1344,7 @@ function renderAll(){
       <div class="seat-card" style="font-size:${seatSize.fontSize}px">
         ${i===game.dealerIdx ? '<div class="dealer-btn" title="庄家">D</div>' : ''}
         <div class="seat-name">${p.name}${humanTag}${roleTags}</div>
-        <div class="seat-stack"><span class="chip-dots">${chipDots(p.stack, game.bigBlind)}</span>筹码 ${p.stack}${p.allIn?' <span class="allin-badge">ALL IN</span>':''}</div>
+        <div class="seat-stack">筹码 ${p.stack}${p.allIn?' · ALL IN':''}</div>
         <div class="seat-cards">${cardsHtml}</div>
         <div class="seat-action${actingNow?' acting-text':''}">${actionText}</div>
         ${betChip}
@@ -1572,7 +1618,7 @@ let gameSpeed={label:'快速',minThink:900,maxThink:1400,waitVoice:true};
 
 function buildSetupUI(){
   const countPicker=document.getElementById('countPicker');
-  for(let n=5;n<=10;n++){
+  for(let n=2;n<=9;n++){
     const b=document.createElement('div');
     b.className='pill'+(n===chosenCount?' active':'');
     b.textContent=n+' 人';
@@ -1607,7 +1653,7 @@ function buildSetupUI(){
   [document.getElementById('nameInput1'), document.getElementById('nameInput2')].forEach(input=>{
     input.addEventListener('input', ()=>{
       let v=input.value;
-      while(nameWeight(v)>10) v=v.slice(0,-1);
+      while(nameWeight(v)>12) v=v.slice(0,-1);
       if(v!==input.value) input.value=v;
     });
   });
@@ -1780,12 +1826,30 @@ async function runHand(){
   document.getElementById('nextHandBtn').onclick = ()=>{ SFX.click(); runHand(); };
 }
 
-document.getElementById('logToggle').onclick = function(){
-  const panel=document.getElementById('logPanel');
-  const show = panel.style.display==='none';
-  panel.style.display = show?'block':'none';
-  this.textContent = show?'隐藏日志':'显示日志';
+document.getElementById('settingsBtn').onclick = function(){
+  document.getElementById('settingsPanel').classList.toggle('show');
 };
+document.getElementById('settingSpeed').onchange = function(){
+  const SPEEDS=[
+    {label:'极速 ⚡',minThink:30,maxThink:100,noVoice:true},
+    {label:'快速',minThink:900,maxThink:1400,waitVoice:true},
+    {label:'普通（默认）',minThink:2500,maxThink:4000,waitVoice:true},
+    {label:'慢速 🐢',minThink:4500,maxThink:7000,waitVoice:true},
+  ];
+  const s=SPEEDS[Number(this.value)];
+  if(s){ gameSpeed=s; if(s.noVoice && !VOICE.isMuted()){ VOICE.toggleMute(); SFX.toggleMute(); document.getElementById('audioToggle').textContent='🔇 静音'; } }
+};
+document.getElementById('settingVoice').onchange = function(){
+  const muted=this.value==='1';
+  if(VOICE.isMuted()!==muted) VOICE.toggleMute();
+  document.getElementById('voiceToggle').textContent = muted ? '🔇 语音播报已关' : '🗣️ 语音播报';
+};
+document.getElementById('settingSFX').onchange = function(){
+  const muted=this.value==='1';
+  if(SFX.isMuted()!==muted){ SFX.toggleMute(); }
+  document.getElementById('audioToggle').textContent = muted ? '🔇 静音' : '🔊 声音';
+};
+
 document.getElementById('restartBtn').onclick = function(){
   if(confirm('确定要重新开局吗？当前进度会丢失。')) location.reload();
 };
