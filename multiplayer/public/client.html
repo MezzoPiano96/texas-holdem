@@ -159,11 +159,17 @@
   .raise-box .amt-input:focus{outline:none;border-color:var(--gold);}
   .raise-box .amt-bb{font-size:12px;color:var(--muted);min-width:44px;}
 
-  #logPanel{max-width:680px;margin:0 auto 40px;padding:14px 20px;
-    background:#0a1814;border:1px solid #1f3a2f;border-radius:12px;
-    font-size:12.5px;color:#a9c4b8;max-height:140px;overflow-y:auto;display:none;}
-  #logPanel .entry{padding:2px 0;border-bottom:1px dashed #18301f;}
+  #logPanel{position:fixed;top:calc(60px + env(safe-area-inset-top));left:calc(10px + env(safe-area-inset-left));z-index:15;
+    width:260px;max-height:calc(70vh - 60px);
+    background:rgba(10,20,16,.92);border:1px solid #1f3a2f;border-radius:12px;
+    font-size:12px;color:#a9c4b8;padding:10px 12px;overflow-y:auto;display:block !important;
+    backdrop-filter:blur(3px);}
+  #logPanel .entry{padding:4px 0;border-bottom:1px dashed #18301f;line-height:1.5;}
   #logPanel .entry:last-child{border:none;}
+  #logPanel .entry.entry-action{color:var(--cream);font-weight:600;}
+  #logPanel .entry.entry-blind{color:var(--gold-bright);}
+  #logPanel .entry.entry-win{color:var(--gold);font-weight:700;}
+  #logPanel .entry.entry-street{color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;}
 
   #nextHandBar{max-width:680px;margin:0 auto 30px;text-align:center;display:none;}
   #nextHandBar.show{display:block;}
@@ -176,7 +182,7 @@
   .hand-rank-toggle:hover{border-color:var(--gold);}
   .hand-rank-panel{position:fixed;top:calc(122px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));width:230px;z-index:24;
     background:rgba(10,20,16,.94);border:1px solid #2c5345;border-radius:12px;
-    padding:14px 16px;max-height:460px;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.5);}
+    padding:14px 16px;box-shadow:0 20px 50px rgba(0,0,0,.5);}
   .hand-rank-panel.hidden{display:none;}
   .hr-title{font-size:13px;color:var(--gold-bright);font-weight:700;margin-bottom:10px;letter-spacing:.5px;}
   .hr-list{list-style:none;margin:0;padding:0;}
@@ -194,6 +200,7 @@
     padding:8px 14px;border-radius:999px;cursor:pointer;font-size:12px;backdrop-filter:blur(2px);}
   .audio-toggle:hover{border-color:var(--gold);}
   .voice-toggle{bottom:calc(58px + env(safe-area-inset-bottom));}
+  .gender-toggle{bottom:calc(100px + env(safe-area-inset-bottom));}
 
   @media (max-width:900px){
     .hand-rank-panel{top:auto;bottom:calc(60px + env(safe-area-inset-bottom));left:calc(10px + env(safe-area-inset-left));right:calc(10px + env(safe-area-inset-right));width:auto;max-height:38vh;}
@@ -295,6 +302,7 @@
 
 <button id="audioToggle" class="audio-toggle">🔊 声音</button>
 <button id="voiceToggle" class="audio-toggle voice-toggle">🗣️ 语音播报</button>
+<button id="genderToggle" class="audio-toggle gender-toggle">🧑 男声</button>
 
 <script>
 // ============================================================
@@ -466,6 +474,10 @@ const SFX = (() => {
 // 语音播报：跟单机版texas-holdem.html里的VOICE模块完全一致。
 // 信心(equity)只在AI座位行动时才有意义，真人自己的操作统一用平稳语调。
 // ============================================================
+const FEMALE_AI_NAMES = ['Arcueid','Ciel','Esdeath','Felt','Hitagi','Irelia'];
+function genderForAI(name){ return FEMALE_AI_NAMES.includes(name) ? 'f' : 'm'; }
+let playerGender = 'm';
+
 const VOICE = (() => {
   let muted=false;
   const CACHE = new Map();
@@ -475,20 +487,26 @@ const VOICE = (() => {
     if(ctx.state==='suspended') ctx.resume();
     return ctx;
   }
-  function buf(actionType){
-    if(CACHE.has(actionType)) return CACHE.get(actionType);
-    const p = fetch(`sfx/voice/${actionType}.mp3`)
-      .then(r=>r.arrayBuffer())
-      .then(b=>ensureCtx().decodeAudioData(b))
-      .catch(()=>{ CACHE.delete(actionType); });
-    CACHE.set(actionType, p);
+  const FILE_MAP={
+    fold:'fold',check:'check',call:'call',bet:'bet',raise:'raise',allin:'allin',
+    your_turn:'your_turn',new_hand:'new_hand',winner:'winner',flop:'flop',
+    turn_card:'turn_card',river:'river',showdown:'showdown',
+    small_blind:'small_blind',big_blind:'big_blind',
+  };
+  function url(base,g){ return `sfx/voice/${base}_${g}.mp3`; }
+  function getBuffer(base,g){
+    const key=base+'_'+g;
+    if(CACHE.has(key)) return CACHE.get(key);
+    const p = fetch(url(base,g)).then(r=>r.arrayBuffer()).then(b=>ensureCtx().decodeAudioData(b)).catch(()=>{ CACHE.delete(key); });
+    CACHE.set(key,p);
     return p;
   }
-  function speak(actionType, equity){
+  function speak(actionType, equity, gender){
     if(muted) return;
-    const textMap = { fold:'Fold', check:'Check', call:'Call', bet:'Bet', raise:'Raise', allin:'All in' };
-    if(!textMap[actionType]) return;
-    buf(actionType).then(buffer=>{
+    const base=FILE_MAP[actionType];
+    if(!base) return;
+    const g=gender||'m';
+    getBuffer(base,g).then(buffer=>{
       if(!buffer) return;
       const c=ensureCtx();
       const source=c.createBufferSource();
@@ -708,16 +726,37 @@ function setConnPill(ok){
   el.className = 'conn-pill ' + (ok?'ok':'bad');
 }
 
+let prevStage=null;
 function handleMessage(msg){
   switch(msg.type){
     case 'lobbyState': lobby=msg; renderLobby(); if(msg.phase!=='lobby') showGameScreen(); break;
     case 'joined': mySeatId=msg.seatId; isHost=msg.isHost; setReconnectToken(msg.reconnectToken); renderLobby(); break;
-    case 'gameState': gameState=msg; showGameScreen(); renderGame(); break;
-    case 'yourTurn': showGameScreen(); renderActionPanel(msg); break;
+    case 'gameState': {
+      const oldStage=prevStage;
+      gameState=msg; showGameScreen(); renderGame();
+      if(!oldStage && msg.stage==='preflop'){ SFX.deal(); VOICE.speak('new_hand', null, playerGender); }
+      else if(oldStage!==msg.stage && (msg.stage==='flop'||msg.stage==='turn'||msg.stage==='river')){
+        SFX.deal();
+        const voiceMap={flop:'flop',turn:'turn_card',river:'river'};
+        VOICE.speak(voiceMap[msg.stage], null, playerGender);
+      }
+      prevStage=msg.stage;
+      break;
+    }
+    case 'yourTurn': showGameScreen(); renderActionPanel(msg); VOICE.speak('your_turn', null, playerGender); break;
     case 'dealt': SFX.deal(); break;
     case 'win': handleWin(msg); break;
     case 'actionTaken': handleActionTaken(msg); break;
-    case 'logLine': log.push(msg.text); renderLog(); break;
+    case 'logLine': {
+      const txt=msg.text||'';
+      let cls='';
+      if(/_ /){} // placeholder for detection below
+      if(txt.includes('弃牌')||txt.includes('过牌')||txt.includes('跟注')||txt.includes('加注')||txt.includes('全下')) cls='entry-action';
+      else if(txt.includes('获得彩池')||txt.includes('赢得')) cls='entry-win';
+      else if(txt.includes('翻牌前')||txt.includes('翻牌')||txt.includes('转牌')||txt.includes('河牌')||txt.includes('手开始')||txt.includes('BB')) ;
+      log.push(cls ? cls+'::'+txt : txt); renderLog();
+      break;
+    }
     case 'handEnded': document.getElementById('actionPanel').classList.remove('show'); showNextHandBar(false); break;
     case 'gameOver': showGameOver(msg); break;
     case 'needMoreAI': handleNeedMoreAI(msg); break;
@@ -738,11 +777,19 @@ function handleActionTaken(msg){
   else if(actionType==='check') SFX.check();
   else if(actionType==='call') SFX.chip();
   else if(actionType==='raise'||actionType==='allin') SFX.raise();
-  if(actionType) VOICE.speak(actionType, msg.equity);
+  if(actionType){
+    const g = msg.isHuman ? playerGender : genderForAI(msg.name);
+    VOICE.speak(actionType, msg.equity, g);
+  }
 }
 function handleWin(msg){
   const iWon = (msg.winnerSeatIds||[]).includes(gameState ? gameState.yourSeatId : mySeatId);
-  if(iWon) SFX.win(); else SFX.lose();
+  if(iWon){ SFX.win(); } else{ SFX.lose(); }
+  // trigger winner voice if I won
+  if(iWon && gameState){
+    const myP = (gameState.players||[]).find(p=>p.id===gameState.yourSeatId);
+    if(myP) VOICE.speak('winner', 0.95, playerGender);
+  }
 }
 
 // ============================================================
@@ -1021,7 +1068,11 @@ function respond(action){
 
 function renderLog(){
   const panel=document.getElementById('logPanel');
-  panel.innerHTML = log.slice(-60).map(l=>`<div class="entry">${l}</div>`).join('');
+  panel.innerHTML = log.slice(-80).map(l=>{
+    const idx=l.indexOf('::');
+    if(idx>0){ const cls=l.slice(0,idx); const txt=l.slice(idx+2); return `<div class="entry ${cls}">${txt}</div>`; }
+    return `<div class="entry">${l}</div>`;
+  }).join('');
   panel.scrollTop = panel.scrollHeight;
 }
 document.getElementById('logToggle').onclick = function(){
@@ -1042,6 +1093,10 @@ document.getElementById('audioToggle').onclick = function(){
 document.getElementById('voiceToggle').onclick = function(){
   const m=VOICE.toggleMute();
   this.textContent = m ? '🔇 语音播报已关' : '🗣️ 语音播报';
+};
+document.getElementById('genderToggle').onclick = function(){
+  playerGender=playerGender==='m'?'f':'m';
+  this.textContent = playerGender==='m' ? '🧑 男声' : '👩 女声';
 };
 document.getElementById('handRankToggle').onclick = function(){
   document.getElementById('handRankPanel').classList.toggle('hidden');

@@ -203,7 +203,7 @@ function onGameUpdate(type, payload) {
     broadcast({ type: 'win', winnerSeatIds });
   } else if (type === 'action') {
     const p = payload;
-    broadcast({ type: 'actionTaken', seatId: playerIdToSeatId.get(p.id), lastAction: p.lastAction, equity: p.isHuman ? null : p.lastActionEquity });
+    broadcast({ type: 'actionTaken', seatId: playerIdToSeatId.get(p.id), lastAction: p.lastAction, equity: p.isHuman ? null : p.lastActionEquity, name: p.name, isHuman: p.isHuman });
   } else if (type === 'log') {
     broadcast({ type: 'logLine', text: payload });
   }

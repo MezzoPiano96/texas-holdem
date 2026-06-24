@@ -247,13 +247,22 @@
   .raise-box .amt-input:focus{outline:none;border-color:var(--gold);}
   .raise-box .amt-bb{font-size:12px;color:var(--muted);min-width:44px;}
 
+  /* ---------- 日志面板（左侧边栏） ---------- */
   #logPanel{
-    max-width:680px;margin:0 auto 40px;padding:14px 20px;
-    background:#0a1814;border:1px solid #1f3a2f;border-radius:12px;
-    font-size:12.5px;color:#a9c4b8;max-height:140px;overflow-y:auto;
+    position:fixed;top:calc(60px + env(safe-area-inset-top));left:calc(10px + env(safe-area-inset-left));z-index:15;
+    width:260px;max-height:calc(70vh - 60px);
+    background:rgba(10,20,16,.92);border:1px solid #1f3a2f;border-radius:12px;
+    font-size:12px;color:#a9c4b8;padding:10px 12px;overflow-y:auto;display:block !important;
+    backdrop-filter:blur(3px);
   }
-  #logPanel .entry{padding:2px 0;border-bottom:1px dashed #18301f;}
+  #logPanel .entry{
+    padding:4px 0;border-bottom:1px dashed #18301f;line-height:1.5;
+  }
   #logPanel .entry:last-child{border:none;}
+  #logPanel .entry.entry-action{color:var(--cream);font-weight:600;}
+  #logPanel .entry.entry-blind{color:var(--gold-bright);}
+  #logPanel .entry.entry-win{color:var(--gold);font-weight:700;}
+  #logPanel .entry.entry-street{color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;}
 
   #nextHandBar{
     max-width:680px;margin:0 auto 30px;text-align:center;display:none;
@@ -297,7 +306,7 @@
   .hand-rank-panel{
     position:fixed;top:calc(122px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));width:230px;z-index:24;
     background:rgba(10,20,16,.94);border:1px solid #2c5345;border-radius:12px;
-    padding:14px 16px;max-height:460px;overflow-y:auto;
+    padding:14px 16px;
     box-shadow:0 20px 50px rgba(0,0,0,.5);
   }
   .hand-rank-panel.hidden{display:none;}
@@ -369,6 +378,19 @@
       <input type="text" id="nameInput1" placeholder="玩家1" maxlength="10">
       <input type="text" id="nameInput2" placeholder="玩家2" maxlength="10">
     </div>
+  </div>
+
+  <div class="field">
+    <label>你的语音</label>
+    <div class="pill-row">
+      <div class="pill active" id="genderMaleBtn">男声 🧑</div>
+      <div class="pill" id="genderFemaleBtn">女声 👩</div>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>游戏速度（AI思考时间）</label>
+    <div class="pill-row" id="speedPicker"></div>
   </div>
 
   <button id="startBtn" disabled>开始游戏</button>
@@ -800,7 +822,8 @@ function decideAction(p, view, game){
 
 function aiDecide(p, view, game){
   return new Promise(resolve=>{
-    const thinkTime = 550 + Math.random()*700;
+    const s=gameSpeed||{minThink:600,maxThink:1200};
+    const thinkTime = s.minThink + Math.random()*(s.maxThink-s.minThink);
     setTimeout(()=>resolve(decideAction(p, view, game)), thinkTime);
   });
 }
@@ -985,6 +1008,11 @@ const SFX = (() => {
 // 牌一般就说得更轻更慢更犹豫，真人自己的操作没有"信心"这个概念，统一用平稳语调。
 // 跟 SFX（背景音乐/音效）完全独立的开关，方便各自单独静音。
 // ============================================================
+// AI 性别映射：女性角色用女声
+const FEMALE_AI_NAMES = ['Arcueid','Ciel','Esdeath','Felt','Hitagi','Irelia'];
+function genderForAI(name){ return FEMALE_AI_NAMES.includes(name) ? 'f' : 'm'; }
+let playerGender = 'm'; // 玩家默认男声，可在设置界面切换
+
 const VOICE = (() => {
   let muted=false;
   const CACHE = new Map();
@@ -994,20 +1022,27 @@ const VOICE = (() => {
     if(ctx.state==='suspended') ctx.resume();
     return ctx;
   }
-  function buf(actionType){
-    if(CACHE.has(actionType)) return CACHE.get(actionType);
-    const p = fetch(`sfx/voice/${actionType}.mp3`)
-      .then(r=>r.arrayBuffer())
-      .then(b=>ensureCtx().decodeAudioData(b))
-      .catch(()=>{ CACHE.delete(actionType); });
-    CACHE.set(actionType, p);
+  // 语音文件基名对应表。文件名约定：{base}_{gender}.mp3
+  const FILE_MAP={
+    fold:'fold',check:'check',call:'call',bet:'bet',raise:'raise',allin:'allin',
+    your_turn:'your_turn',new_hand:'new_hand',winner:'winner',flop:'flop',
+    turn_card:'turn_card',river:'river',showdown:'showdown',
+    small_blind:'small_blind',big_blind:'big_blind',
+  };
+  function url(base,g){ return `sfx/voice/${base}_${g}.mp3`; }
+  function getBuffer(base,g){
+    const key=base+'_'+g;
+    if(CACHE.has(key)) return CACHE.get(key);
+    const p = fetch(url(base,g)).then(r=>r.arrayBuffer()).then(b=>ensureCtx().decodeAudioData(b)).catch(()=>{ CACHE.delete(key); });
+    CACHE.set(key,p);
     return p;
   }
-  function speak(actionType, equity){
+  function speak(actionType, equity, gender){
     if(muted) return;
-    const textMap = { fold:'Fold', check:'Check', call:'Call', bet:'Bet', raise:'Raise', allin:'All in' };
-    if(!textMap[actionType]) return;
-    buf(actionType).then(buffer=>{
+    const base=FILE_MAP[actionType];
+    if(!base) return;
+    const g=gender||'m';
+    getBuffer(base,g).then(buffer=>{
       if(!buffer) return;
       const c=ensureCtx();
       const source=c.createBufferSource();
@@ -1332,7 +1367,12 @@ function respond(action){
 
 function renderLog(){
   const panel=document.getElementById('logPanel');
-  panel.innerHTML = game.log.slice(-60).map(l=>`<div class="entry">${l}</div>`).join('');
+  panel.innerHTML = game.log.slice(-80).map(l=>{
+    // 解析 logPushStyled 写入的 "cls::text" 格式（如果没有 :: 就是普通文本）
+    const idx=l.indexOf('::');
+    if(idx>0){ const cls=l.slice(0,idx); const txt=l.slice(idx+2); return `<div class="entry ${cls}">${txt}</div>`; }
+    return `<div class="entry">${l}</div>`;
+  }).join('');
   panel.scrollTop = panel.scrollHeight;
 }
 
@@ -1342,6 +1382,7 @@ function renderLog(){
 let chosenCount=6;
 let chosenSeats=[];
 let chosenStack=1000, chosenSB=5, chosenBB=10;
+let gameSpeed={label:'普通（默认）',minThink:600,maxThink:1200};
 
 function buildSetupUI(){
   const countPicker=document.getElementById('countPicker');
@@ -1383,6 +1424,38 @@ function buildSetupUI(){
       while(nameWeight(v)>10) v=v.slice(0,-1);
       if(v!==input.value) input.value=v;
     });
+  });
+
+  // 性别选择
+  document.getElementById('genderMaleBtn').onclick=()=>{
+    playerGender='m';
+    document.getElementById('genderMaleBtn').classList.add('active');
+    document.getElementById('genderFemaleBtn').classList.remove('active');
+  };
+  document.getElementById('genderFemaleBtn').onclick=()=>{
+    playerGender='f';
+    document.getElementById('genderFemaleBtn').classList.add('active');
+    document.getElementById('genderMaleBtn').classList.remove('active');
+  };
+
+  // 速度选择
+  const SPEEDS=[
+    {label:'极速 ⚡',minThink:30,maxThink:100},
+    {label:'快速',minThink:200,maxThink:400},
+    {label:'普通（默认）',minThink:600,maxThink:1200},
+    {label:'慢速 🐢',minThink:1500,maxThink:3000},
+  ];
+  const spEl=document.getElementById('speedPicker');
+  SPEEDS.forEach((s,i)=>{
+    const b=document.createElement('div');
+    b.className='pill'+(i===2?' active':''); // 默认"普通"
+    b.textContent=s.label;
+    b.onclick=()=>{
+      gameSpeed=s;
+      [...spEl.children].forEach(c=>c.classList.remove('active'));
+      b.classList.add('active');
+    };
+    spEl.appendChild(b);
   });
 }
 function refreshCountUI(){
@@ -1443,6 +1516,10 @@ function startGame(){
   runHand();
 }
 
+function genderForPlayer(p){
+  if(!p.isHuman) return genderForAI(p.name);
+  return playerGender;
+}
 function actionTypeFromLastAction(la){
   if(la.startsWith('弃牌')) return 'fold';
   if(la.startsWith('过牌')) return 'check';
@@ -1451,24 +1528,48 @@ function actionTypeFromLastAction(la){
   if(la.startsWith('加注')) return 'raise';
   return null;
 }
+function logPushStyled(text, cls){
+  // 给 pushLog 的文本加上样式标记前缀，renderLog 解析后渲染成带 class 的条目
+  game.log.push(cls ? cls+'::'+text : text);
+  renderLog();
+}
 function onGameUpdate(type, payload){
   if(type==='render'){ renderAll(); }
-  else if(type==='acting'){ actingSeatId=payload; renderAll(); }
-  else if(type==='deal'){ SFX.deal(); }
+  else if(type==='acting'){
+    actingSeatId=payload;
+    renderAll();
+    if(payload>=0 && game.players[payload].isHuman) {
+      VOICE.speak('your_turn', null, genderForPlayer(game.players[payload]));
+    }
+  }
+  else if(type==='deal'){
+    SFX.deal();
+    const s=game.stage;
+    if(s==='preflop'){ VOICE.speak('new_hand', null, genderForPlayer(game.players.find(p=>p.isHuman)||game.players[0])); }
+    else if(s==='flop'){ VOICE.speak('flop', null, genderForPlayer(game.players.find(p=>p.isHuman)||game.players[0])); }
+    else if(s==='turn'){ VOICE.speak('turn_card', null, genderForPlayer(game.players.find(p=>p.isHuman)||game.players[0])); }
+    else if(s==='river'){ VOICE.speak('river', null, genderForPlayer(game.players.find(p=>p.isHuman)||game.players[0])); }
+  }
   else if(type==='win'){
     const winnerIds=payload||[];
     const humanWon = game.players.some(p=>p.isHuman && winnerIds.includes(p.id));
-    if(humanWon) SFX.win(); else SFX.lose();
+    if(humanWon){ SFX.win(); VOICE.speak('winner', 0.95, genderForPlayer(game.players[winnerIds[0]])); }
+    else{ SFX.lose(); }
+    // 摊牌时给日志加上赢家信息条
+    if(game.stage==='showdown'||game.onlyOneLeft()){
+      logPushStyled('', 'entry-street');  // separator
+    }
   }
   else if(type==='action'){
     const p=payload;
     const la=p.lastAction||'';
     const actionType=actionTypeFromLastAction(la);
-    if(actionType==='fold') SFX.fold();
-    else if(actionType==='check') SFX.check();
-    else if(actionType==='call') SFX.chip();
-    else if(actionType==='raise'||actionType==='allin') SFX.raise();
-    if(actionType) VOICE.speak(actionType, p.isHuman ? null : p.lastActionEquity);
+    if(actionType==='fold'){ SFX.fold(); VOICE.speak(actionType, p.isHuman ? null : p.lastActionEquity, genderForPlayer(p)); }
+    else if(actionType==='check'){ SFX.check(); VOICE.speak(actionType, p.isHuman ? null : p.lastActionEquity, genderForPlayer(p)); }
+    else if(actionType==='call'){ SFX.chip(); VOICE.speak(actionType, p.isHuman ? null : p.lastActionEquity, genderForPlayer(p)); }
+    else if(actionType==='raise'||actionType==='allin'){ SFX.raise(); VOICE.speak(actionType, p.isHuman ? null : p.lastActionEquity, genderForPlayer(p)); }
+    // 给日志加行动标记
+    if(actionType) logPushStyled(la, 'entry-action');
   }
 }
 
