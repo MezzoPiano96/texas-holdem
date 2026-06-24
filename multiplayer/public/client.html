@@ -91,15 +91,28 @@
   .stage-label{font-size:11px;color:var(--muted);margin-top:6px;letter-spacing:2px;text-transform:uppercase;}
   .blinds-label{font-size:13px;color:var(--muted);margin-left:10px;font-weight:400;}
 
-  .card{width:46px;height:64px;border-radius:6px;background:var(--cream);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    font-weight:700;font-size:18px;color:var(--ink);box-shadow:0 3px 6px rgba(0,0,0,.4);
+  .card{width:46px;height:64px;border-radius:6px;
+    background:linear-gradient(170deg,#fff,#f5f1e8);
+    display:flex;flex-direction:column;align-items:center;
+    font-weight:700;font-size:18px;color:var(--ink);box-shadow:0 3px 8px rgba(0,0,0,.45);
     border:1px solid #d8d0bd;flex-shrink:0;position:relative;
-    transition:transform .15s ease, box-shadow .15s ease;}
+    transition:transform .15s ease, box-shadow .15s ease;overflow:hidden;}
+  .card::before{content:'';position:absolute;inset:0;
+    background:linear-gradient(160deg,rgba(255,255,255,.4) 0%,transparent 40%,rgba(0,0,0,.04) 100%);
+    pointer-events:none;}
   .card:hover{transform:translateY(-4px) scale(1.12);box-shadow:0 10px 22px rgba(0,0,0,.5);z-index:6;}
   .card.red{color:var(--red);}
+  .card .c-rank{font-size:0.65em;line-height:1;position:absolute;
+    display:flex;flex-direction:column;align-items:center;gap:0.08em;}
+  .card .c-rank .c-sym{font-size:0.65em;line-height:1;}
+  .card .c-rank-tl{top:0.22em;left:0.3em;}
+  .card .c-rank-br{bottom:0.22em;right:0.3em;transform:rotate(180deg);}
+  .card .c-center{font-size:1.3em;line-height:1;margin:auto 0;text-shadow:0 1px 2px rgba(0,0,0,.15);}
   .card.back{background:repeating-linear-gradient(135deg,#1a3a52,#1a3a52 4px,#234a66 4px,#234a66 8px);border:1px solid #0c2233;}
+  .card.back::before{display:none;}
   .card.small{width:2.6em;height:3.7em;font-size:1em;border-radius:0.38em;}
+  .card.small .c-rank{font-size:0.5em;}
+  .card.small .c-center{font-size:1em;}
 
   .seat{position:absolute;width:148px;transform:translate(-50%,-50%);text-align:center;}
   .seat-card{background:rgba(10,20,16,.82);border:1px solid #2c5345;border-radius:0.92em;
@@ -113,7 +126,12 @@
   .role-tag.sb{background:#3a6ea5;color:#fff;}
   .role-tag.bb{background:var(--red);color:#fff;}
   .role-tag.off{background:var(--danger);color:#fff;}
-  .seat-stack{font-size:0.92em;color:var(--gold-bright);margin-top:0.15em;}
+  .seat-stack{font-size:0.92em;color:var(--gold-bright);margin-top:0.15em;display:flex;align-items:center;gap:0.3em;flex-wrap:wrap;justify-content:center;}
+  .chip-dots{display:flex;gap:2px;align-items:center;}
+  .chip-dot{width:0.55em;height:0.55em;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,.15);flex-shrink:0;}
+  .chip-dot.c1{background:#c9a24b;}  .chip-dot.c2{background:#3a6ea5;}  .chip-dot.c3{background:#b5402f;}
+  .chip-dot.c4{background:#3f8f5f;}  .chip-dot.c5{background:#9fb8ac;}
+  .allin-badge{font-size:0.65em;background:var(--danger);color:#fff;padding:0.04em 0.35em;border-radius:0.3em;letter-spacing:.5px;}
   .seat-cards{display:flex;gap:0.3em;justify-content:center;margin-top:0.46em;}
   .seat-action{margin-top:0.38em;font-size:0.85em;color:var(--muted);min-height:1em;}
   .seat-action.acting-text{color:var(--gold-bright);font-weight:700;}
@@ -482,17 +500,27 @@ const VOICE = (() => {
   let muted=false;
   const CACHE = new Map();
   let ctx=null;
-  function ensureCtx(){
-    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
-    if(ctx.state==='suspended') ctx.resume();
-    return ctx;
-  }
+  let speaking=false;
+  let pending=null;
   const FILE_MAP={
     fold:'fold',check:'check',call:'call',bet:'bet',raise:'raise',allin:'allin',
     your_turn:'your_turn',new_hand:'new_hand',winner:'winner',flop:'flop',
     turn_card:'turn_card',river:'river',showdown:'showdown',
     small_blind:'small_blind',big_blind:'big_blind',
   };
+  const VOICE_PITCH_OFFSET = new Map();
+  function pitchOffsetFor(name){
+    if(VOICE_PITCH_OFFSET.has(name)) return VOICE_PITCH_OFFSET.get(name);
+    let h=0; for(const ch of (name||'')) h=(h*31+ch.charCodeAt(0))&0xffff;
+    const off = (h%200)/1000 - 0.1;
+    VOICE_PITCH_OFFSET.set(name, off);
+    return off;
+  }
+  function ensureCtx(){
+    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
+    if(ctx.state==='suspended') ctx.resume();
+    return ctx;
+  }
   function url(base,g){ return `sfx/voice/${base}_${g}.mp3`; }
   function getBuffer(base,g){
     const key=base+'_'+g;
@@ -501,34 +529,55 @@ const VOICE = (() => {
     CACHE.set(key,p);
     return p;
   }
-  function speak(actionType, equity, gender){
-    if(muted) return;
-    const base=FILE_MAP[actionType];
-    if(!base) return;
-    const g=gender||'m';
+  function speakNow(base, g, equity, playerName){
     getBuffer(base,g).then(buffer=>{
-      if(!buffer) return;
+      if(!buffer || muted) return;
       const c=ensureCtx();
       const source=c.createBufferSource();
       source.buffer=buffer;
       const gain=c.createGain();
+      const pOff = pitchOffsetFor(playerName);
       if(equity!=null){
         const cc=Math.max(0, Math.min(1, equity));
-        source.playbackRate.value = 0.85 + cc*0.45;
+        source.playbackRate.value = (0.85 + cc*0.45) * (1 + pOff*0.3);
         gain.gain.value = 0.55 + cc*0.45;
       } else {
-        source.playbackRate.value = 1;
+        source.playbackRate.value = 1 * (1 + pOff*0.3);
         gain.gain.value = 0.85;
       }
+      source.detune.value = pOff * 200;
       source.connect(gain).connect(c.destination);
+      speaking=true;
+      source.onended = ()=>{
+        speaking=false;
+        if(pending && !muted){
+          const n=pending; pending=null;
+          speakNow(n.base, n.g, n.equity, n.name);
+        }
+      };
       source.start();
     }).catch(()=>{});
+  }
+  function speak(actionType, equity, gender, playerName){
+    if(muted) return;
+    const base=FILE_MAP[actionType];
+    if(!base) return;
+    const g=gender||'m';
+    if(speaking){ pending={base,g,equity,name:playerName||''}; return; }
+    speakNow(base, g, equity, playerName||'');
+  }
+  function waitForSilence(){
+    if(!speaking) return Promise.resolve();
+    return new Promise(r=>{ const c=setInterval(()=>{ if(!speaking){ clearInterval(c); r(); } }, 50); });
   }
   return {
     speak,
     isMuted(){ return muted; },
+    isBusy(){ return speaking; },
+    waitForSilence,
     toggleMute(){
       muted=!muted;
+      if(muted){ pending=null; try{ if(ctx) ctx.suspend(); setTimeout(()=>ctx&&ctx.resume(),100); }catch(e){} }
       return muted;
     },
   };
@@ -548,9 +597,20 @@ document.addEventListener('pointerdown', tryStartAudio, {once:true});
 // ============================================================
 function cardEl(card){
   const div=document.createElement('div');
-  div.className='card'+(['h','d'].includes(card.s)?' red':'');
-  div.innerHTML = `<div>${RANK_LABEL[card.r]||card.r}</div><div>${SUIT_SYMBOL[card.s]}</div>`;
+  const isRed=['h','d'].includes(card.s);
+  div.className='card'+(isRed?' red':'');
+  const rl=RANK_LABEL[card.r]||card.r;
+  const sym=SUIT_SYMBOL[card.s];
+  div.innerHTML=`<span class="c-rank c-rank-tl"><span>${rl}</span><span class="c-sym">${sym}</span></span><span class="c-center">${sym}</span><span class="c-rank c-rank-br"><span>${rl}</span><span class="c-sym">${sym}</span></span>`;
   return div;
+}
+function chipDots(stack, bb){
+  if(stack<=0) return '';
+  const count=Math.min(10, Math.max(1, Math.ceil(Math.min(stack, Math.max(2, Math.floor(stack/bb)*2))/3)));
+  let html='';
+  for(let i=0;i<count;i++) html+=`<span class="chip-dot c${i%5+1}"></span>`;
+  if(count>=10) html+='<span style="font-size:0.5em;color:var(--muted)">+</span>';
+  return html;
 }
 function ellipseFracs(w){
   return w<440 ? {rx:0.34, ry:0.37} : {rx:0.42, ry:0.40};
@@ -677,17 +737,63 @@ function estimateEquity(hole, board, numOpponents, iterations){
   }
   return winShare/iterations;
 }
-function getHintAdvice(equity, toCall, pot){
-  if(toCall===0){
-    if(equity>0.6) return {advice:'建议下注 / 加注', tone:'good'};
-    if(equity>0.4) return {advice:'可以小注试探，也能过牌', tone:'mid'};
-    return {advice:'建议过牌', tone:'mid'};
+function getHandTypeName(score){
+  const names=['高牌','一对','两对','三条','顺子','同花','葫芦','四条','同花顺'];
+  return {name:names[score[0]]||'高牌', kickers:score.slice(1)};
+}
+function getHandTypeDesc(hole, board){
+  const all=[...hole,...board];
+  if(all.length<5){
+    const a=hole[0].r,b=hole[1].r;
+    const suited=hole[0].s===hole[1].s;
+    const pair=a===b;
+    let desc=[];
+    if(pair) desc.push(`对子 ${RANK_LABEL[a]||a}`);
+    else desc.push(`${suited?'同花':'不同花'} ${RANK_LABEL[Math.max(a,b)]||Math.max(a,b)} ${RANK_LABEL[Math.min(a,b)]||Math.min(a,b)}`);
+    return {desc:desc.join(' '), isStrong:Math.max(a,b)>=14||(Math.max(a,b)>=13&&Math.min(a,b)>=10)};
   }
-  const potOdds = toCall/(pot+toCall);
-  const margin = equity - potOdds;
-  if(margin>0.1) return {advice:'建议跟注 / 加注（胜率明显占优）', tone:'good'};
-  if(margin>-0.05) return {advice:'跟注大致划算', tone:'mid'};
-  return {advice:'建议弃牌（胜率不够）', tone:'bad'};
+  const score=evaluate7(all);
+  const ht=getHandTypeName(score);
+  const unseenCards=makeDeck().filter(c=>!all.some(oc=>oc.r===c.r&&oc.s===c.s));
+  const outs={};
+  for(const drawType of ['顺子','同花','葫芦','四条','同花顺']){
+    const idx=['高牌','一对','两对','三条','顺子','同花','葫芦','四条','同花顺'].indexOf(drawType);
+    if(score[0]>=idx) continue;
+    let count=0;
+    for(const c of unseenCards){
+      const testScore=evaluate7([...all,c]);
+      if(testScore[0]>=idx) count++;
+    }
+    if(count>0) outs[drawType]=count;
+  }
+  return {desc:`${ht.name}（${RANK_LABEL[score[1]]||score[1]}带头）`, made:score[0], score, outs};
+}
+function getHintAdvice(equity, toCall, pot, hole, board, numOpponents){
+  const handInfo=board&&board.length>0 ? getHandTypeDesc(hole, board) : null;
+  const potOdds=toCall>0 ? (toCall/(pot+toCall)*100).toFixed(1) : 0;
+  const equityPct=Math.round(equity*100);
+  const margin=equity - (toCall>0 ? toCall/(pot+toCall) : 0);
+  let lines=[];
+  if(handInfo) lines.push(`牌型：${handInfo.desc}`);
+  if(!board||board.length===0) lines.push('阶段：翻牌前');
+  lines.push(`剩余对手：${numOpponents}人 · 模拟胜率：${equityPct}%`);
+  if(toCall>0) lines.push(`底池赔率：跟注 ${toCall} 赢 ${pot+toCall}（需 ${potOdds}%+ 胜率才划算）`);
+  if(toCall===0) lines.push('当前无人下注');
+  if(toCall===0){
+    if(equity>0.7) lines.push('🟢 牌力强，建议下注底池的60-80%作为价值下注');
+    else if(equity>0.55) lines.push('🟢 胜率优势，建议下注底池50-65%建立池面价值');
+    else if(equity>0.4) lines.push('🟡 中等牌力，可以小注30-50%试探或过牌观望');
+    else lines.push('🟡 牌力一般，建议过牌省钱，偶尔用30%以下极小注咋呼');
+  } else {
+    if(margin>0.15) lines.push('🟢 胜率大幅超过赔率要求，建议加注而非仅跟注');
+    else if(margin>0) lines.push('🟡 胜率超过赔率要求，跟注为正期望值。有抽牌可跟');
+    else if(margin>-0.08) lines.push('🟡 考虑隐含赔率可跟，否则建议弃牌');
+    else lines.push('🔴 胜率不足，建议弃牌');
+  }
+  if(equity<0.35&&toCall===0) lines.push('💡 可偶尔咋呼：下底池30-40%（假装有好牌）');
+  if(equity>0.7&&toCall===0) lines.push('💡 强牌：大注(70%+)施压，小注(40%)诱跟，视对手风格定');
+  const tone = margin>0.15?'good':(margin>-0.08?'mid':'bad');
+  return {lines, tone, equityPct};
 }
 
 // ============================================================
@@ -734,16 +840,21 @@ function handleMessage(msg){
     case 'gameState': {
       const oldStage=prevStage;
       gameState=msg; showGameScreen(); renderGame();
-      if(!oldStage && msg.stage==='preflop'){ SFX.deal(); VOICE.speak('new_hand', null, playerGender); }
+      if(!oldStage && msg.stage==='preflop'){ SFX.deal(); VOICE.speak('new_hand', null, playerGender, (msg.players.find(p=>p.id===msg.yourSeatId)||{}).name); }
       else if(oldStage!==msg.stage && (msg.stage==='flop'||msg.stage==='turn'||msg.stage==='river')){
         SFX.deal();
         const voiceMap={flop:'flop',turn:'turn_card',river:'river'};
-        VOICE.speak(voiceMap[msg.stage], null, playerGender);
+        VOICE.speak(voiceMap[msg.stage], null, playerGender, (msg.players.find(p=>p.id===msg.yourSeatId)||{}).name);
       }
       prevStage=msg.stage;
       break;
     }
-    case 'yourTurn': showGameScreen(); renderActionPanel(msg); VOICE.speak('your_turn', null, playerGender); break;
+    case 'yourTurn': {
+      showGameScreen(); renderActionPanel(msg);
+      const myP = gameState && gameState.players.find(p=>p.id===gameState.yourSeatId);
+      VOICE.speak('your_turn', null, playerGender, myP ? myP.name : 'Player');
+      break;
+    }
     case 'dealt': SFX.deal(); break;
     case 'win': handleWin(msg); break;
     case 'actionTaken': handleActionTaken(msg); break;
@@ -779,16 +890,15 @@ function handleActionTaken(msg){
   else if(actionType==='raise'||actionType==='allin') SFX.raise();
   if(actionType){
     const g = msg.isHuman ? playerGender : genderForAI(msg.name);
-    VOICE.speak(actionType, msg.equity, g);
+    VOICE.speak(actionType, msg.equity, g, msg.name);
   }
 }
 function handleWin(msg){
   const iWon = (msg.winnerSeatIds||[]).includes(gameState ? gameState.yourSeatId : mySeatId);
   if(iWon){ SFX.win(); } else{ SFX.lose(); }
-  // trigger winner voice if I won
   if(iWon && gameState){
     const myP = (gameState.players||[]).find(p=>p.id===gameState.yourSeatId);
-    if(myP) VOICE.speak('winner', 0.95, playerGender);
+    if(myP) VOICE.speak('winner', 0.95, playerGender, myP.name);
   }
 }
 
@@ -959,7 +1069,7 @@ function renderGame(){
       <div class="seat-card" style="font-size:${seatSize.fontSize}px">
         ${p.id===gameState.dealerIdx ? '<div class="dealer-btn" title="庄家">D</div>' : ''}
         <div class="seat-name">${p.name}${meTag}${roleTags}</div>
-        <div class="seat-stack">筹码 ${p.stack}${p.allIn?' · ALL IN':''}</div>
+        <div class="seat-stack"><span class="chip-dots">${gameState ? chipDots(p.stack, gameState.bigBlind) : ''}</span>筹码 ${p.stack}${p.allIn?' <span class="allin-badge">ALL IN</span>':''}</div>
         <div class="seat-cards">${cardsHtml}</div>
         <div class="seat-action${actingNow?' acting-text':''}">${actionText}</div>
         ${betChip}
@@ -979,9 +1089,9 @@ function renderHint(msg){
   const numOpponents = gameState.players.filter(p=>p.id!==gameState.yourSeatId && !p.folded).length;
   const iterations = msg.stage==='preflop' ? 260 : 170;
   const equity = numOpponents>0 ? estimateEquity(msg.holeCards, gameState.community, numOpponents, iterations) : 1;
-  const {advice, tone} = getHintAdvice(equity, msg.toCall, msg.pot);
+  const {lines, tone, equityPct} = getHintAdvice(equity, msg.toCall, msg.pot, msg.holeCards, gameState.community, numOpponents);
   result.className='hint-result '+tone;
-  result.innerHTML = `胜率约 <span class="pct">${Math.round(equity*100)}%</span> · <span class="advice">${advice}</span>`;
+  result.innerHTML = `<span class="pct">胜率约 ${equityPct}%</span><span class="advice" style="font-weight:400;line-height:1.7;display:block;margin-top:4px;"><br>${lines.join('<br>')}</span>`;
 }
 function renderActionPanel(msg){
   const panel=document.getElementById('actionPanel');
