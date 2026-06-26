@@ -1,7 +1,7 @@
 {
-  "name": "德州扑克 · 自建牌桌",
+  "name": "德州扑克",
   "short_name": "德州扑克",
-  "description": "5-10人自定义德州扑克牌桌，支持单人/双人同屏轮流对战AI",
+  "description": "2-9人自定义德州扑克牌桌，支持单人/双人同屏轮流对战AI，可调AI难度",
   "start_url": "./texas-holdem.html",
   "scope": "./",
   "display": "standalone",
