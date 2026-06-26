@@ -1070,6 +1070,13 @@ let gameState=null; // 最近一次收到的 gameState
 let log=[];
 let chosenTableSize=6, chosenStack=1000, chosenSB=5, chosenBB=10, chosenAIDifficulty='normal';
 
+function escapeHtml(v){
+  return String(v).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function safeLogClass(v){
+  return /^[a-z0-9_-]+$/i.test(v) ? v : '';
+}
+
 function getReconnectToken(){ return sessionStorage.getItem('reconnectToken'); }
 function setReconnectToken(t){ sessionStorage.setItem('reconnectToken', t); }
 
@@ -1237,7 +1244,7 @@ function renderLobby(){
     if(s.status==='human' && !s.connected) badges+='<span class="badge off">离线</span>';
     let rmBtn='';
     if(isHost && s.status==='ai') rmBtn=`<button class="rm" data-seat="${s.seatId}">移除</button>`;
-    row.innerHTML = `<div class="idx">${s.seatId+1}</div><div class="nm">${s.status==='empty'?'空座位':s.name}</div>${badges}${rmBtn}`;
+    row.innerHTML = `<div class="idx">${s.seatId+1}</div><div class="nm">${s.status==='empty'?'空座位':escapeHtml(s.name)}</div>${badges}${rmBtn}`;
     list.appendChild(row);
   });
   list.querySelectorAll('.rm').forEach(btn=>{
@@ -1287,7 +1294,7 @@ function showNextHandBar(gameOver){
 function showGameOver(msg){
   document.getElementById('actionPanel').classList.remove('show');
   const bar=document.getElementById('nextHandBar');
-  bar.innerHTML = `<div style="color:var(--gold-bright);margin-bottom:10px;">本局结束！${msg.winnerName?msg.winnerName+' 赢得了所有筹码':''}</div><div style="font-size:12px;color:var(--muted);">房主需要重启服务器才能开始新的一局</div>`;
+  bar.innerHTML = `<div style="color:var(--gold-bright);margin-bottom:10px;">本局结束！${msg.winnerName?escapeHtml(msg.winnerName)+' 赢得了所有筹码':''}</div><div style="font-size:12px;color:var(--muted);">房主需要重启服务器才能开始新的一局</div>`;
   bar.classList.add('show');
 }
 
@@ -1350,13 +1357,13 @@ function renderGame(){
 
     const meTag = isMe ? '<span class="tag">你</span>' : '';
     const roleTags = (p.id===gameState.sbIdx?'<span class="role-tag sb">小盲</span>':'') + (p.id===gameState.bbIdx?'<span class="role-tag bb">大盲</span>':'');
-    const actionText = actingNow ? (isMe?'等待你操作…':`${p.name} 思考中…`) : formatAction(p.lastActionType, p.lastActionAmount);
+    const actionText = actingNow ? (isMe?'等待你操作…':`${escapeHtml(p.name)} 思考中…`) : formatAction(p.lastActionType, p.lastActionAmount);
     const betChip = p.bet>0 ? `<div class="bet-chip"><div class="chip-stack">${chipStackHtml(p.bet, gameState.bigBlind)}</div><div class="bet-label">下注 ${p.bet} <span class="bet-bb">· ${formatBB(p.bet/gameState.bigBlind)}BB</span></div></div>` : '';
 
     seat.innerHTML = `
       <div class="seat-card" style="font-size:${seatSize.fontSize}px">
         ${p.id===gameState.dealerIdx ? '<div class="dealer-btn" title="庄家">D</div>' : ''}
-        <div class="seat-name">${p.name}${meTag}${roleTags}</div>
+        <div class="seat-name">${escapeHtml(p.name)}${meTag}${roleTags}</div>
         <div class="seat-stack">筹码 ${p.stack}${p.allIn?' <span class="allin-badge">ALL IN</span>':''}</div>
         <div class="seat-cards">${cardsHtml}</div>
         <div class="seat-action${actingNow?' acting-text':''}">${actionText}</div>
@@ -1468,8 +1475,8 @@ function renderLog(){
   const body=document.getElementById('logBody');
   body.innerHTML = log.slice(-80).map(l=>{
     const idx=l.indexOf('::');
-    if(idx>0){ const cls=l.slice(0,idx); const txt=l.slice(idx+2); return `<div class="entry ${cls}">${txt}</div>`; }
-    return `<div class="entry">${l}</div>`;
+    if(idx>0){ const cls=safeLogClass(l.slice(0,idx)); const txt=l.slice(idx+2); return `<div class="entry ${cls}">${txt}</div>`; }
+    return `<div class="entry">${escapeHtml(l)}</div>`;
   }).join('');
   body.scrollTop = body.scrollHeight;
 }

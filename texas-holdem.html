@@ -763,6 +763,9 @@ function handLabel(n){
   return `第 ${n} 手`;
 }
 function paren(text){ return currentLang==='zh-CN' ? `（${text}）` : ` (${text})`; }
+function escapeHtml(v){
+  return String(v).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
 function potSubText(potTotal){
   const bb=formatBB(potTotal/game.bigBlind);
   if(currentLang==='en') return `≈ ${bb}BB · Blinds ${game.smallBlind}/${game.bigBlind}`;
@@ -775,14 +778,16 @@ function gateTurnText(name){
   return `轮到 ${name} 行动`;
 }
 function gateSubText(name){
-  if(currentLang==='en') return `Please hand the device to <b>${name}</b>. Confirm it's really them before viewing hole cards — others please don't peek.`;
-  if(currentLang==='ja') return `デバイスを <b>${name}</b> に渡してください。本人確認後に手札を見てください。他の人は画面を見ないでください。`;
-  return `请将设备交给 <b>${name}</b>，确认是本人后再点击查看手牌。其他玩家请不要偷看屏幕。`;
+  const safeName=escapeHtml(name);
+  if(currentLang==='en') return `Please hand the device to <b>${safeName}</b>. Confirm it's really them before viewing hole cards — others please don't peek.`;
+  if(currentLang==='ja') return `デバイスを <b>${safeName}</b> に渡してください。本人確認後に手札を見てください。他の人は画面を見ないでください。`;
+  return `请将设备交给 <b>${safeName}</b>，确认是本人后再点击查看手牌。其他玩家请不要偷看屏幕。`;
 }
 function gateBtnText(name){
-  if(currentLang==='en') return `I'm ${name}, view my cards`;
-  if(currentLang==='ja') return `${name} です、手札を見る`;
-  return `我是 ${name}，查看我的手牌`;
+  const safeName=escapeHtml(name);
+  if(currentLang==='en') return `I'm ${safeName}, view my cards`;
+  if(currentLang==='ja') return `${safeName} です、手札を見る`;
+  return `我是 ${safeName}，查看我的手牌`;
 }
 function actionWhoText(name, pot, bb){
   if(currentLang==='en') return `${name}'s turn (You) · Pot ${pot} (${bb}BB)`;
@@ -1859,13 +1864,13 @@ function renderAll(){
 
     const humanTag = p.isHuman ? `<span class="tag">${privacyMode?T('player'):T('you')}</span>` : '';
     const roleTags = (i===game.sbIdx?`<span class="role-tag sb">${T('smallBlind')}</span>`:'') + (i===game.bbIdx?`<span class="role-tag bb">${T('bigBlind')}</span>`:'');
-    const actionText = actingNow ? (p.isHuman?T('waiting'):`${p.name} ${T('thinking')}`) : formatAction(p.lastActionType, p.lastActionAmount);
+    const actionText = actingNow ? (p.isHuman?T('waiting'):`${escapeHtml(p.name)} ${T('thinking')}`) : formatAction(p.lastActionType, p.lastActionAmount);
     const betChip = p.bet>0 ? `<div class="bet-chip"><div class="chip-stack">${chipStackHtml(p.bet, game.bigBlind)}</div><div class="bet-label">${T('bet')} ${p.bet} <span class="bet-bb">· ${formatBB(p.bet/game.bigBlind)}BB</span></div></div>` : '';
 
     seat.innerHTML = `
       <div class="seat-card" style="font-size:${seatSize.fontSize}px">
         ${i===game.dealerIdx ? `<div class="dealer-btn" title="${T('dealer')}">D</div>` : ''}
-        <div class="seat-name">${p.name}${humanTag}${roleTags}</div>
+        <div class="seat-name">${escapeHtml(p.name)}${humanTag}${roleTags}</div>
         <div class="seat-stack">${T('chips')} ${p.stack}${p.allIn?' · ALL IN':''}</div>
         <div class="seat-cards">${cardsHtml}</div>
         <div class="seat-action${actingNow?' acting-text':''}">${actionText}</div>
@@ -2425,10 +2430,10 @@ function roleBadgeIcon(role){
 // 把结构化的 log 条目按当前语言格式化成最终 HTML —— 渲染时才翻译，
 // 所以切换语言会让已经记录下来的历史条目也跟着重新翻译
 function formatLogEntry(e){
-  if(e.type==='hand') return `${handLabel(e.handCount)} · ${T('dealerWord')} ${e.dealerName}`;
+  if(e.type==='hand') return `${handLabel(e.handCount)} · ${T('dealerWord')} ${escapeHtml(e.dealerName)}`;
   if(e.type==='blind'){
     const verb = e.role==='sb' ? T('postSmallBlind') : T('postBigBlind');
-    return `${roleBadgeIcon(e.role)}<span class="log-name">${e.name}</span> ${verb} ${e.amount}${paren(T('pot')+' '+e.pot)}`;
+    return `${roleBadgeIcon(e.role)}<span class="log-name">${escapeHtml(e.name)}</span> ${verb} ${e.amount}${paren(T('pot')+' '+e.pot)}`;
   }
   if(e.type==='street'){
     if(e.stage==='flop') return `${T('stage_flop')} ${e.cards.map(cardText).join(' ')}`;
@@ -2438,14 +2443,14 @@ function formatLogEntry(e){
   }
   if(e.type==='action'){
     const la=formatAction(e.actionType, e.amount);
-    return `${roleBadgeIcon(e.role)}<span class="log-name">${e.name}</span> ${la}${paren(T('pot')+' '+e.pot)}`;
+    return `${roleBadgeIcon(e.role)}<span class="log-name">${escapeHtml(e.name)}</span> ${la}${paren(T('pot')+' '+e.pot)}`;
   }
-  if(e.type==='winFold') return `🏆 <span class="log-name">${e.winnerName}</span> ${T('pot_won')} ${e.amount}${T('all_others_fold')}`;
+  if(e.type==='winFold') return `🏆 <span class="log-name">${escapeHtml(e.winnerName)}</span> ${T('pot_won')} ${e.amount}${T('all_others_fold')}`;
   if(e.type==='winShowdown'){
-    const names=e.winnerNames.map(n=>`<span class="log-name">${n}</span>`).join(currentLang==='zh-CN'?'、':', ');
+    const names=e.winnerNames.map(n=>`<span class="log-name">${escapeHtml(n)}</span>`).join(currentLang==='zh-CN'?'、':', ');
     return `🏆 ${T('wonPot')} ${e.potAmount} ${T('wonBy')} ${names} ${T('wonSuffix')}${paren(handNameI18n(e.handTypeIdx))}`;
   }
-  if(e.type==='gameOver') return e.winnerName ? `🏁 ${winsAllChipsText(e.winnerName)}` : `🏁 ${T('gameOver')}`;
+  if(e.type==='gameOver') return e.winnerName ? `🏁 ${winsAllChipsText(escapeHtml(e.winnerName))}` : `🏁 ${T('gameOver')}`;
   return '';
 }
 function logPushStyled(entry){

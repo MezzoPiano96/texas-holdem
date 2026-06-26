@@ -12,6 +12,10 @@ const RANK_LABEL = {11:'J',12:'Q',13:'K',14:'A'};
 const SUIT_SYMBOL = {s:'♠',h:'♥',d:'♦',c:'♣'};
 const HAND_NAMES = ['高牌','一对','两对','三条','顺子','同花','葫芦','四条','同花顺'];
 
+function escapeHtml(v){
+  return String(v).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
 function makeDeck(){ const d=[]; for(const s of SUITS) for(const r of RANKS) d.push({r,s}); return d; }
 function shuffle(deck){ const d=deck.slice(); for(let i=d.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]]; } return d; }
 
@@ -93,6 +97,7 @@ class PokerGame{
   }
   // log 跟单机版一样用 "cls::text" 的格式存样式标记，客户端按 :: 拆开渲染成带 class 的条目
   pushLog(msg, cls){ const entry = cls ? cls+'::'+msg : msg; this.log.push(entry); this.onUpdate('log', entry); }
+  logName(idx){ return escapeHtml(this.players[idx].name); }
   roleBadgeFor(idx){
     if(idx===this.sbIdx) return '<span class="log-role sb">S</span>';
     if(idx===this.bbIdx) return '<span class="log-role bb">B</span>';
@@ -121,11 +126,11 @@ class PokerGame{
     const sbIdx=this.nextActiveSeat(this.dealerIdx, p=>!p.folded);
     const bbIdx=this.nextActiveSeat(sbIdx, p=>!p.folded);
     this.sbIdx=sbIdx; this.bbIdx=bbIdx;
-    this.pushLog(`第 ${this.handCount} 手 · 庄家 ${this.players[this.dealerIdx].name}`, 'entry-hand');
+    this.pushLog(`第 ${this.handCount} 手 · 庄家 ${this.logName(this.dealerIdx)}`, 'entry-hand');
     this.postBet(sbIdx,this.smallBlind);
-    this.pushLog(`${this.roleBadgeFor(sbIdx)}<span class="log-name">${this.players[sbIdx].name}</span> 下小盲 ${this.smallBlind}（底池 ${this.totalPot()}）`, 'entry-blind');
+    this.pushLog(`${this.roleBadgeFor(sbIdx)}<span class="log-name">${this.logName(sbIdx)}</span> 下小盲 ${this.smallBlind}（底池 ${this.totalPot()}）`, 'entry-blind');
     this.postBet(bbIdx,this.bigBlind);
-    this.pushLog(`${this.roleBadgeFor(bbIdx)}<span class="log-name">${this.players[bbIdx].name}</span> 下大盲 ${this.bigBlind}（底池 ${this.totalPot()}）`, 'entry-blind');
+    this.pushLog(`${this.roleBadgeFor(bbIdx)}<span class="log-name">${this.logName(bbIdx)}</span> 下大盲 ${this.bigBlind}（底池 ${this.totalPot()}）`, 'entry-blind');
     this.currentBet=this.bigBlind;
     this.minRaise=this.bigBlind;
     this.stage='preflop';
@@ -273,7 +278,7 @@ class PokerGame{
     const winner=this.players.find(p=>!p.folded);
     const amount=this.totalPot();
     winner.stack+=amount;
-    this.pushLog(`🏆 <span class="log-name">${winner.name}</span> 获得彩池 ${amount}（其余玩家已弃牌）`, 'entry-win');
+    this.pushLog(`🏆 <span class="log-name">${escapeHtml(winner.name)}</span> 获得彩池 ${amount}（其余玩家已弃牌）`, 'entry-win');
     for(const p of this.players) p.totalBet=0;
     this.onUpdate('win', [winner.id]);
   }
@@ -295,7 +300,7 @@ class PokerGame{
         if(remainder>0) remainder--;
         allWinnerIds.add(id);
       }
-      const winnerNames=winners.map(id=>`<span class="log-name">${this.players[id].name}</span>`).join('、');
+      const winnerNames=winners.map(id=>`<span class="log-name">${this.logName(id)}</span>`).join('、');
       this.pushLog(`🏆 彩池 ${pot.amount} 由 ${winnerNames} 赢得（${HAND_NAMES[results[winners[0]][0]]}）`, 'entry-win');
     }
     for(const p of this.players) p.totalBet=0;

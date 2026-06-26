@@ -162,9 +162,26 @@ function migrateHostIfNeeded() {
 // ---------- 服务器端 decideFn：AI走原算法，真人等WebSocket消息 ----------
 // game.players 用的是"已占用座位压缩后"的下标（player.id），跟大厅里持久的座位号
 // （seatId，给连接/重连/座位UI用）不是一回事——大厅可能有空座位被跳过。
-// playerIdToSeatId 是两者之间唯一的翻译层，所有面向网络协议的消息都用 seatId，
+// playerIdToSeatId / seatIdToPlayerId 是两者之间唯一的翻译层，所有面向网络协议的消息都用 seatId，
 // 只有直接读写 engine.js 的 PokerGame 对象时才用 player.id。
 let playerIdToSeatId = new Map();
+let seatIdToPlayerId = new Map();
+
+function buildSeatMaps(occupiedSeats) {
+  const playerToSeat = new Map();
+  const seatToPlayer = new Map();
+  occupiedSeats.forEach((s, k) => {
+    playerToSeat.set(k, s.seatId);
+    seatToPlayer.set(s.seatId, k);
+  });
+  return { playerToSeat, seatToPlayer };
+}
+
+function playerForSeatId(seatId) {
+  if (!game) return null;
+  const playerId = seatIdToPlayerId.get(seatId);
+  return playerId == null ? null : game.players[playerId] || null;
+}
 
 function decideFn(p, view, gameRef) {
   const seatId = playerIdToSeatId.get(p.id);
@@ -185,7 +202,7 @@ function decideFn(p, view, gameRef) {
         resolve({ type: view.toCall > 0 ? 'fold' : 'check' });
       }
     }, 250);
-    pendingResolvers.set(seatId, { resolve, interval, view, holeCards: p.holeCards });
+    pendingResolvers.set(seatId, { resolve, interval, view, holeCards: p.holeCards, stack: p.stack, bet: p.bet });
     sendYourTurn(seatId, p, view);
   });
 }
@@ -227,8 +244,9 @@ function startActualGame() {
   const occupied = seats.map((s, i) => ({ ...s, seatId: i })).filter(s => s.status !== 'empty');
   const playerNames = occupied.map(s => s.name);
   const humanIdxs = occupied.map((s, k) => (s.status === 'human' ? k : -1)).filter(k => k !== -1);
-  playerIdToSeatId = new Map();
-  occupied.forEach((s, k) => playerIdToSeatId.set(k, s.seatId));
+  const maps = buildSeatMaps(occupied);
+  playerIdToSeatId = maps.playerToSeat;
+  seatIdToPlayerId = maps.seatToPlayer;
   game = new engine.PokerGame(
     playerNames, tableOptions.stack, tableOptions.smallBlind, tableOptions.bigBlind,
     humanIdxs, decideFn, onGameUpdate,
@@ -366,9 +384,40 @@ function handleAction(connId, msg) {
   const seatId = conn.seatId;
   const pending = pendingResolvers.get(seatId);
   if (!pending) return; // 不是这个座位在被等待，忽略（防止串座位/重复提交）
+  const action = normalizePlayerAction(msg, pending);
+  if (!action) return;
   clearInterval(pending.interval);
   pendingResolvers.delete(seatId);
-  pending.resolve({ type: msg.actionType, amount: msg.amount });
+  pending.resolve(action);
+}
+
+function normalizePlayerAction(msg, pending) {
+  const allowed = new Set(['fold', 'check', 'call', 'raise', 'bet', 'allin']);
+  const type = String(msg.actionType || msg.type || '');
+  if (!allowed.has(type)) return null;
+
+  const view = pending.view;
+  const toCall = Math.max(0, Number(view.toCall) || 0);
+  const playerStack = Number.isFinite(Number(pending.stack)) ? Number(pending.stack) : null;
+  const currentBet = Math.max(0, Number(view.currentBet) || 0);
+  const minRaise = Math.max(1, Number(view.minRaise) || 1);
+  const bet = Math.max(0, Number(pending.bet) || 0);
+  const maxRaiseTo = bet + (playerStack == null ? 0 : playerStack);
+  const minRaiseTo = Math.min(currentBet + minRaise, maxRaiseTo);
+
+  if (type === 'fold') return { type: 'fold' };
+  if (type === 'check') return toCall === 0 ? { type: 'check' } : null;
+  if (type === 'call') return toCall > 0 ? { type: 'call' } : { type: 'check' };
+  if (type === 'allin') return maxRaiseTo > bet ? { type: 'allin' } : (toCall > 0 ? { type: 'fold' } : { type: 'check' });
+
+  if (type === 'raise' || type === 'bet') {
+    if (playerStack == null || playerStack <= toCall) return null;
+    const rawAmount = Number(msg.amount);
+    if (!Number.isFinite(rawAmount)) return null;
+    const amount = Math.max(minRaiseTo, Math.min(maxRaiseTo, Math.round(rawAmount)));
+    return { type: 'raise', amount };
+  }
+  return null;
 }
 function handleHello(connId, ws, token) {
   if (token && reconnectTokens.has(token)) {
@@ -386,7 +435,8 @@ function handleHello(connId, ws, token) {
       } else {
         broadcastGameState();
         const pending = pendingResolvers.get(seatId);
-        if (pending) sendToSeat(seatId, { type: 'yourTurn', stage: pending.view.stage, pot: pending.view.pot, currentBet: pending.view.currentBet, minRaise: pending.view.minRaise, toCall: pending.view.toCall, stack: game.players[seatId].stack, bet: game.players[seatId].bet, holeCards: pending.holeCards });
+        const player = playerForSeatId(seatId);
+        if (pending && player) sendToSeat(seatId, { type: 'yourTurn', stage: pending.view.stage, pot: pending.view.pot, currentBet: pending.view.currentBet, minRaise: pending.view.minRaise, toCall: pending.view.toCall, stack: player.stack, bet: player.bet, holeCards: pending.holeCards });
       }
       return;
     }
@@ -442,15 +492,27 @@ function handleMessage(connId, ws, raw) {
 }
 
 // ---------- HTTP 静态文件服务 + WebSocket ----------
-const PUBLIC_DIR = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
+const PUBLIC_DIR = path.resolve(__dirname, 'public');
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.mp3': 'audio/mpeg' };
+
+function publicPathForUrl(rawUrl) {
+  let reqPath;
+  try {
+    reqPath = decodeURIComponent(String(rawUrl || '').split('?')[0]);
+  } catch (err) {
+    return null;
+  }
+  if (reqPath === '/' || reqPath === '') reqPath = '/client.html';
+  const filePath = path.resolve(PUBLIC_DIR, `.${reqPath}`);
+  const rel = path.relative(PUBLIC_DIR, filePath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return filePath;
+}
 
 const httpServer = http.createServer((req, ws_unused_res) => {
   const res = ws_unused_res;
-  let reqPath = decodeURIComponent(req.url.split('?')[0]);
-  if (reqPath === '/' || reqPath === '') reqPath = '/client.html';
-  const filePath = path.join(PUBLIC_DIR, reqPath);
-  if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end('Forbidden'); }
+  const filePath = publicPathForUrl(req.url);
+  if (!filePath) { res.writeHead(403); return res.end('Forbidden'); }
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
     const ext = path.extname(filePath);
@@ -468,16 +530,29 @@ wss.on('connection', ws => {
   ws.on('close', () => handleClose(connId));
 });
 
-httpServer.listen(PORT, () => {
-  const ips = [];
-  for (const ifaces of Object.values(os.networkInterfaces())) {
-    for (const iface of ifaces || []) {
-      if (iface.family === 'IPv4' && !iface.internal) ips.push(iface.address);
+function startServer() {
+  httpServer.listen(PORT, () => {
+    const ips = [];
+    for (const ifaces of Object.values(os.networkInterfaces())) {
+      for (const iface of ifaces || []) {
+        if (iface.family === 'IPv4' && !iface.internal) ips.push(iface.address);
+      }
     }
-  }
-  console.log('德州扑克联机服务器已启动！');
-  console.log('让大家在同一个WiFi下，用手机浏览器打开下面的地址：');
-  if (ips.length === 0) console.log(`  http://localhost:${PORT}/  （没检测到局域网IP，请检查网络连接）`);
-  for (const ip of ips) console.log(`  http://${ip}:${PORT}/`);
-  console.log('按 Ctrl+C 关闭服务器。');
-});
+    console.log('德州扑克联机服务器已启动！');
+    console.log('让大家在同一个WiFi下，用手机浏览器打开下面的地址：');
+    if (ips.length === 0) console.log(`  http://localhost:${PORT}/  （没检测到局域网IP，请检查网络连接）`);
+    for (const ip of ips) console.log(`  http://${ip}:${PORT}/`);
+    console.log('按 Ctrl+C 关闭服务器。');
+  });
+}
+
+if (require.main === module) startServer();
+
+module.exports = {
+  startServer,
+  _internals: {
+    normalizePlayerAction,
+    publicPathForUrl,
+    buildSeatMaps,
+  },
+};

@@ -5,7 +5,9 @@
   "description": "局域网联机德州扑克服务器",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test && node ../scripts/check-voice-assets.js",
+    "check:voice": "node ../scripts/check-voice-assets.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
