@@ -20,12 +20,13 @@ const AI_NAME_POOL = ['Arcueid','Berserker','Ciel','Diluc','Esdeath','Felt','Gil
 // ---------- 桌子/大厅状态（全局单例，一个进程一桌） ----------
 let phase = 'lobby'; // 'lobby' | 'playing' | 'betweenHands' | 'gameover'
 let tableSize = 6;
-let tableOptions = { stack: 1000, smallBlind: 5, bigBlind: 10 };
+let tableOptions = { stack: 1000, smallBlind: 5, bigBlind: 10, aiDifficulty: 'normal' };
 let seats = makeEmptySeats(tableSize);
 let hostConnId = null;
 let game = null;
 let actingSeatId = -1;
 let nextHandRequested = false;
+let gamePaused = false; // 房主专属：暂停期间AI不偷偷思考，真人操作倒计时也冻结
 
 const connections = new Map(); // connId -> { ws, seatId }
 const reconnectTokens = new Map(); // token -> seatId
@@ -54,7 +55,7 @@ function nameWeight(str) {
 }
 function sanitizeName(raw, fallback) {
   let v = String(raw || '').trim();
-  while (nameWeight(v) > 10) v = v.slice(0, -1);
+  while (nameWeight(v) > 16) v = v.slice(0, -1);
   return v || fallback;
 }
 
@@ -124,11 +125,13 @@ function buildBaseSnapshot() {
     actingSeatId,
     smallBlind: game.smallBlind,
     bigBlind: game.bigBlind,
+    paused: gamePaused,
     // players 按座位号(seatId)排序输出，而不是引擎内部的压缩下标，方便客户端直接对照大厅座位
     players: game.players
       .map(p => ({
         seatId: playerIdToSeatId.get(p.id), name: p.name, stack: p.stack, bet: p.bet,
-        folded: p.folded, allIn: p.allIn, isHuman: p.isHuman, lastAction: p.lastAction,
+        folded: p.folded, allIn: p.allIn, isHuman: p.isHuman,
+        lastActionType: p.lastActionType, lastActionAmount: p.lastActionAmount,
         _fullPlayer: p,
       }))
       .sort((a, b) => a.seatId - b.seatId),
@@ -143,7 +146,7 @@ function broadcastGameState() {
     const playersWithCards = base.players.map(pl => {
       const full = pl._fullPlayer;
       const reveal = (game.stage === 'showdown' && !full.folded) || pl.seatId === seatId;
-      return { id: pl.seatId, name: pl.name, stack: pl.stack, bet: pl.bet, folded: pl.folded, allIn: pl.allIn, isHuman: pl.isHuman, lastAction: pl.lastAction, holeCards: reveal ? full.holeCards : null };
+      return { id: pl.seatId, name: pl.name, stack: pl.stack, bet: pl.bet, folded: pl.folded, allIn: pl.allIn, isHuman: pl.isHuman, lastActionType: pl.lastActionType, lastActionAmount: pl.lastActionAmount, holeCards: reveal ? full.holeCards : null };
     });
     send(conn.ws, { ...base, players: playersWithCards, yourSeatId: seatId });
   }
@@ -166,13 +169,23 @@ let playerIdToSeatId = new Map();
 function decideFn(p, view, gameRef) {
   const seatId = playerIdToSeatId.get(p.id);
   const seat = seats[seatId];
-  if (seat.status === 'ai') return engine.aiDecide(p, view, gameRef);
+  if (seat.status === 'ai') return engine.aiDecide(p, view, gameRef, tableOptions.aiDifficulty);
   return new Promise(resolve => {
-    const timer = setTimeout(() => {
-      pendingResolvers.delete(seatId);
-      resolve({ type: view.toCall > 0 ? 'fold' : 'check' });
-    }, ACTION_TIMEOUT_MS);
-    pendingResolvers.set(seatId, { resolve, timer, view, holeCards: p.holeCards });
+    // 倒计时用轮询而不是单个setTimeout，这样暂停期间可以冻结剩余时间，恢复后接着倒计时，
+    // 跟单机版"暂停时AI不偷偷思考"是同一个思路，只是这里冻结的是真人的操作超时
+    let remaining = ACTION_TIMEOUT_MS;
+    let last = Date.now();
+    const interval = setInterval(() => {
+      const now = Date.now();
+      if (!gamePaused) remaining -= (now - last);
+      last = now;
+      if (remaining <= 0) {
+        clearInterval(interval);
+        pendingResolvers.delete(seatId);
+        resolve({ type: view.toCall > 0 ? 'fold' : 'check' });
+      }
+    }, 250);
+    pendingResolvers.set(seatId, { resolve, interval, view, holeCards: p.holeCards });
     sendYourTurn(seatId, p, view);
   });
 }
@@ -203,7 +216,7 @@ function onGameUpdate(type, payload) {
     broadcast({ type: 'win', winnerSeatIds });
   } else if (type === 'action') {
     const p = payload;
-    broadcast({ type: 'actionTaken', seatId: playerIdToSeatId.get(p.id), lastAction: p.lastAction, equity: p.isHuman ? null : p.lastActionEquity, name: p.name, isHuman: p.isHuman });
+    broadcast({ type: 'actionTaken', seatId: playerIdToSeatId.get(p.id), lastActionType: p.lastActionType, lastActionAmount: p.lastActionAmount, name: p.name, isHuman: p.isHuman });
   } else if (type === 'log') {
     broadcast({ type: 'logLine', text: payload });
   }
@@ -221,6 +234,8 @@ function startActualGame() {
     humanIdxs, decideFn, onGameUpdate,
   );
   game.players.forEach(p => { if (!p.isHuman) p.aggression = 0.75 + Math.random() * 0.6; });
+  gamePaused = false;
+  engine.setPaused(false);
   phase = 'playing';
   broadcastLobbyState();
   runHand();
@@ -277,8 +292,22 @@ function handleSetTableOptions(connId, opts) {
   if (phase !== 'lobby') return;
   const stack = Number(opts.stack), sb = Number(opts.smallBlind), bb = Number(opts.bigBlind);
   if (![stack, sb, bb].every(Number.isFinite) || stack <= 0 || sb <= 0 || bb <= 0) return;
-  tableOptions = { stack, smallBlind: sb, bigBlind: bb };
+  tableOptions = { ...tableOptions, stack, smallBlind: sb, bigBlind: bb };
   broadcastLobbyState();
+}
+function handleSetAIDifficulty(connId, difficulty) {
+  if (connId !== hostConnId) return;
+  if (phase !== 'lobby') return;
+  if (!['beginner', 'normal', 'hell'].includes(difficulty)) return;
+  tableOptions = { ...tableOptions, aiDifficulty: difficulty };
+  broadcastLobbyState();
+}
+function handleTogglePause(connId) {
+  if (connId !== hostConnId) return;
+  if (phase !== 'playing' && phase !== 'betweenHands') return;
+  gamePaused = !gamePaused;
+  engine.setPaused(gamePaused);
+  broadcast({ type: 'pauseState', paused: gamePaused });
 }
 function handleStartGame(connId, ws, forceFillAI) {
   if (connId !== hostConnId) return sendError(ws, 'NOT_HOST', '只有房主可以开始游戏');
@@ -337,7 +366,7 @@ function handleAction(connId, msg) {
   const seatId = conn.seatId;
   const pending = pendingResolvers.get(seatId);
   if (!pending) return; // 不是这个座位在被等待，忽略（防止串座位/重复提交）
-  clearTimeout(pending.timer);
+  clearInterval(pending.interval);
   pendingResolvers.delete(seatId);
   pending.resolve({ type: msg.actionType, amount: msg.amount });
 }
@@ -381,7 +410,7 @@ function handleClose(connId) {
     seat.connected = false;
     const pending = pendingResolvers.get(seatId);
     if (pending) {
-      clearTimeout(pending.timer);
+      clearInterval(pending.interval);
       pendingResolvers.delete(seatId);
       pending.resolve({ type: pending.view.toCall > 0 ? 'fold' : 'check' });
     }
@@ -403,7 +432,9 @@ function handleMessage(connId, ws, raw) {
     case 'removeAI': return handleRemoveAI(connId, msg.seatId);
     case 'setTableSize': return handleSetTableSize(connId, msg.size);
     case 'setTableOptions': return handleSetTableOptions(connId, msg);
+    case 'setAIDifficulty': return handleSetAIDifficulty(connId, msg.difficulty);
     case 'startGame': return handleStartGame(connId, ws, !!msg.forceFillAI);
+    case 'togglePause': return handleTogglePause(connId);
     case 'requestNextHand': return handleRequestNextHand(connId);
     case 'action': return handleAction(connId, msg);
     default: return;

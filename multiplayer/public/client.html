@@ -6,7 +6,7 @@
 <title>德州扑克 · 联机</title>
 <style>
   :root{
-    --felt-1:#0b3d2e; --felt-2:#0f4d39; --rail:#3a2317; --rail-light:#5a3a26;
+    --felt-1:#0b3d2e; --felt-2:#0f4d39; --rail:#3a2317; --rail-light:#5a3a26; --cushion:#5c2727;
     --gold:#c9a24b; --gold-bright:#e8c878; --cream:#f5f1e8; --ink:#1c1611;
     --red:#b5402f; --muted:#9fb8ac; --panel:#142b22; --danger:#a8412f; --good:#3f8f5f;
   }
@@ -62,7 +62,7 @@
 
   /* ---------- 牌桌 ---------- */
   #game{display:none;}
-  .topbar{display:flex;justify-content:space-between;align-items:center;
+  .topbar{position:relative;display:flex;justify-content:space-between;align-items:center;
     padding:10px 22px;background:#0a1814;border-bottom:1px solid #1f3a2f;}
   .topbar h2{margin:0;font-size:17px;}
   .topbar h2 .display{color:var(--gold-bright);}
@@ -73,14 +73,78 @@
   .conn-pill{font-size:11px;padding:3px 9px;border-radius:999px;}
   .conn-pill.ok{background:#1d3b2f;color:var(--good);border:1px solid var(--good);}
   .conn-pill.bad{background:#2a1816;color:var(--danger);border:1px solid var(--danger);}
+  .game-timer-center{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:rgba(0,0,0,.35);border:1px solid rgba(201,162,75,.4);
+    color:var(--gold-bright);font-size:14px;font-weight:700;letter-spacing:.5px;
+    padding:6px 16px;border-radius:14px;font-variant-numeric:tabular-nums;
+    pointer-events:none;
+  }
+  @media (max-width:600px){
+    .topbar{flex-wrap:wrap;row-gap:6px;}
+    .topbar h2{flex:1 1 100%;min-width:0;font-size:15px;}
+    .game-timer-center{position:static;transform:none;font-size:11px;padding:3px 8px;order:2;flex-shrink:0;}
+    .topbar .btns{order:3;margin-left:auto;}
+  }
+  /* ---------- 暂停覆盖 ---------- */
+  #pauseOverlay{display:none;position:fixed;inset:0;z-index:90;
+    background:rgba(4,9,7,.88);flex-direction:column;align-items:center;justify-content:center;
+    gap:20px;backdrop-filter:blur(4px);}
+  #pauseOverlay.show{display:flex;}
+  #pauseOverlay .pause-title{font-size:36px;color:var(--gold-bright);font-weight:700;letter-spacing:2px;}
+  #pauseOverlay .pause-sub{font-size:14px;color:var(--muted);}
+  .pause-resume-btn{
+    padding:14px 40px;border-radius:12px;border:none;cursor:pointer;
+    background:linear-gradient(180deg,var(--gold-bright),var(--gold));color:var(--ink);
+    font-size:16px;font-weight:700;letter-spacing:.5px;
+  }
+  .pause-resume-btn:hover{filter:brightness(1.08);}
+  /* ---------- 设置面板 ---------- */
+  .settings-panel{
+    display:none;position:fixed;inset:0;z-index:100;
+    background:rgba(4,9,7,.85);flex-direction:column;align-items:center;justify-content:center;
+    padding:20px;backdrop-filter:blur(3px);
+  }
+  .settings-panel.show{display:flex;}
+  .settings-panel .settings-title{font-size:20px;color:var(--gold-bright);font-weight:700;margin-bottom:20px;text-align:center;}
+  .settings-panel .settings-section{background:rgba(10,20,16,.92);border:1px solid #2c5345;border-radius:14px;padding:20px 24px;max-width:360px;width:100%;}
+  .setting-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px dashed #18301f;font-size:14px;}
+  .setting-row:last-child{border:none;}
+  .setting-row select{padding:6px 10px;border-radius:6px;border:1px solid #2c5345;background:#0f241c;color:var(--cream);font-size:13px;}
+  .setting-row select:focus{outline:none;border-color:var(--gold);}
+  .setting-row select:disabled{opacity:.5;cursor:not-allowed;}
+  .settings-close{display:block;margin:16px auto 0;padding:10px 34px;border:none;border-radius:10px;cursor:pointer;
+    background:linear-gradient(180deg,var(--gold-bright),var(--gold));color:var(--ink);font-weight:700;font-size:14px;}
 
-  .table-wrap{position:relative;width:min(96vw,980px);height:560px;margin:26px auto 10px;}
-  .felt{position:absolute;inset:0;border-radius:50% / 45%;
-    background:radial-gradient(ellipse at center, var(--felt-2) 0%, var(--felt-1) 75%);
-    border:14px solid var(--rail);box-shadow:inset 0 0 60px rgba(0,0,0,.55), 0 20px 50px rgba(0,0,0,.5);}
-  .felt::after{content:"";position:absolute;inset:14px;border-radius:50% / 45%;
-    border:2px solid rgba(201,162,75,.18);}
-  .center-area{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;width:340px;}
+  .table-wrap{position:relative;width:min(94vw,1600px);height:min(60vh,820px);margin:20px auto 10px;}
+  .table-wrap::before{
+    content:"";position:absolute;inset:-10px;border-radius:50%;
+    background:
+      repeating-linear-gradient(100deg, rgba(0,0,0,.09) 0px, rgba(0,0,0,.09) 2px, transparent 2px, transparent 7px),
+      linear-gradient(160deg, var(--rail-light), var(--rail) 60%);
+    box-shadow:0 22px 55px rgba(0,0,0,.55), inset 0 2px 5px rgba(255,255,255,.1), inset 0 -6px 14px rgba(0,0,0,.4);
+    z-index:0;
+  }
+  .felt{
+    position:absolute;inset:0;z-index:1;overflow:hidden;border-radius:50%;
+    background:
+      radial-gradient(ellipse at 50% 32%, rgba(255,255,255,.07) 0%, transparent 48%),
+      radial-gradient(ellipse at center, var(--felt-2) 0%, var(--felt-1) 78%);
+    border:10px solid var(--cushion);
+    box-shadow:inset 0 0 70px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.35);
+  }
+  .felt::after{
+    content:"";position:absolute;inset:16px;border-radius:50%;
+    border:2px solid rgba(201,162,75,.22);
+    box-shadow:inset 0 0 0 7px rgba(201,162,75,.08);
+  }
+  .table-brand{
+    position:absolute;top:21%;left:50%;transform:translate(-50%,-50%);
+    font-size:14px;letter-spacing:5px;color:rgba(201,162,75,.24);
+    font-weight:700;text-transform:uppercase;pointer-events:none;z-index:2;
+    text-shadow:0 1px 0 rgba(255,255,255,.05);
+  }
+  .center-area{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;width:min(34vw,420px);min-width:240px;z-index:3;}
   .community{display:flex;gap:8px;justify-content:center;margin-bottom:10px;min-height:78px;}
   .pot-display{font-size:14px;color:var(--gold-bright);letter-spacing:.5px;
     background:rgba(0,0,0,.3);display:inline-block;padding:8px 18px;border-radius:14px;
@@ -114,8 +178,12 @@
   .card.small{width:2.6em;height:3.7em;font-size:1em;border-radius:0.38em;}
   .card.small .c-rank{font-size:0.5em;}
   .card.small .c-center{font-size:1em;}
+  .card.mini{width:1.7em;height:2.4em;font-size:10.5px;border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,.4);}
+  .card.mini:hover{transform:none;box-shadow:0 1px 3px rgba(0,0,0,.4);}
+  .card.mini .c-rank .c-sym{display:none;}
+  .card.mini .c-center{font-size:0.95em;}
 
-  .seat{position:absolute;width:148px;transform:translate(-50%,-50%);text-align:center;}
+  .seat{position:absolute;width:148px;z-index:3;transform:translate(-50%,-50%);text-align:center;}
   .seat-card{background:rgba(10,20,16,.82);border:1px solid #2c5345;border-radius:0.92em;
     padding:0.6em 0.77em 0.77em;font-size:13px;position:relative;backdrop-filter:blur(2px);}
   .seat.me .seat-card{border-color:var(--gold);box-shadow:0 0 0 1px rgba(201,162,75,.35), 0 6px 18px rgba(0,0,0,.4);}
@@ -128,10 +196,6 @@
   .role-tag.bb{background:var(--red);color:#fff;}
   .role-tag.off{background:var(--danger);color:#fff;}
   .seat-stack{font-size:0.92em;color:var(--gold-bright);margin-top:0.15em;display:flex;align-items:center;gap:0.3em;flex-wrap:wrap;justify-content:center;}
-  .chip-dots{display:flex;gap:2px;align-items:center;}
-  .chip-dot{width:0.55em;height:0.55em;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,.15);flex-shrink:0;}
-  .chip-dot.c1{background:#c9a24b;}  .chip-dot.c2{background:#3a6ea5;}  .chip-dot.c3{background:#b5402f;}
-  .chip-dot.c4{background:#3f8f5f;}  .chip-dot.c5{background:#9fb8ac;}
   .allin-badge{font-size:0.65em;background:var(--danger);color:#fff;padding:0.04em 0.35em;border-radius:0.3em;letter-spacing:.5px;}
   .seat-cards{display:flex;gap:0.3em;justify-content:center;margin-top:0.46em;}
   .seat-action{margin-top:0.38em;font-size:0.85em;color:var(--muted);min-height:1em;}
@@ -140,12 +204,30 @@
   .dealer-btn{position:absolute;top:-0.6em;right:-0.6em;width:1.7em;height:1.7em;border-radius:50%;
     background:var(--cream);color:var(--ink);font-size:0.77em;font-weight:800;
     display:flex;align-items:center;justify-content:center;border:0.15em solid var(--gold);}
-  .bet-chip{position:absolute;bottom:-1.08em;left:50%;transform:translateX(-50%);
+  .bet-chip{
+    position:absolute;bottom:-1.9em;left:50%;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:0.2em;
+    pointer-events:none;
+  }
+  .bet-chip .bet-label{
     background:#241a0f;border:1px solid var(--gold);color:var(--gold-bright);
-    font-size:0.85em;padding:0.15em 0.7em;border-radius:999px;white-space:nowrap;}
+    font-size:0.85em;padding:0.15em 0.7em;border-radius:999px;white-space:nowrap;
+  }
   .bet-chip .bet-bb{color:var(--muted);}
+  .chip-stack{display:flex;flex-direction:column;align-items:center;}
+  .chip{
+    width:1.5em;height:0.6em;border-radius:50%;flex-shrink:0;
+    box-shadow:0 0.1em 0 rgba(0,0,0,.35), inset 0 -0.07em 0.1em rgba(0,0,0,.3), inset 0 0.07em 0.1em rgba(255,255,255,.3);
+    position:relative;
+  }
+  .chip::after{
+    content:"";position:absolute;inset:0.09em;border-radius:50%;
+    border:0.09em dashed rgba(255,255,255,.55);
+  }
+  .chip+.chip{margin-top:-0.3em;}
+  .flying-chip-stack{pointer-events:none;}
 
-  #actionPanel{max-width:680px;margin:0 auto 30px;padding:16px 22px;
+  #actionPanel{position:relative;z-index:16;max-width:680px;margin:0 auto 30px;padding:16px 22px;
     background:var(--panel);border:1px solid #24463a;border-radius:14px;display:none;}
   #actionPanel.show{display:block;}
   .panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
@@ -181,16 +263,44 @@
   #logPanel{position:fixed;top:calc(60px + env(safe-area-inset-top));left:calc(10px + env(safe-area-inset-left));z-index:15;
     width:260px;max-height:calc(70vh - 60px);
     background:rgba(10,20,16,.92);border:1px solid #1f3a2f;border-radius:12px;
-    font-size:12px;color:#a9c4b8;padding:10px 12px;overflow-y:auto;display:block !important;
+    font-size:12px;color:#a9c4b8;display:flex !important;flex-direction:column;overflow:hidden;
     backdrop-filter:blur(3px);}
+  .log-header{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:9px 12px;font-size:12.5px;font-weight:700;color:var(--gold-bright);
+    letter-spacing:.5px;cursor:pointer;border-bottom:1px solid #1f3a2f;flex-shrink:0;user-select:none;
+  }
+  .log-header:hover{background:rgba(255,255,255,.03);}
+  .log-collapse-icon{font-size:10px;color:var(--muted);transition:transform .2s;}
+  #logPanel.collapsed .log-collapse-icon{transform:rotate(-90deg);}
+  #logPanel.collapsed .log-body{display:none;}
+  .log-body{padding:8px 12px;overflow-y:auto;flex:1;min-height:0;}
   #logPanel .entry{padding:4px 0;border-bottom:1px dashed #18301f;line-height:1.5;}
   #logPanel .entry:last-child{border:none;}
-  #logPanel .entry.entry-action{color:var(--cream);font-weight:600;}
+  #logPanel .entry.entry-action{color:var(--cream);font-weight:500;}
   #logPanel .entry.entry-blind{color:var(--gold-bright);}
   #logPanel .entry.entry-win{color:var(--gold);font-weight:700;}
-  #logPanel .entry.entry-street{color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;}
+  #logPanel .entry.entry-hand{
+    text-align:center;color:var(--ink);font-weight:800;font-size:11.5px;letter-spacing:1px;
+    background:linear-gradient(180deg,var(--gold-bright),var(--gold));border-radius:6px;
+    padding:5px 4px;margin:6px 0 4px;border-bottom:none;
+  }
+  #logPanel .entry.entry-street{
+    text-align:center;color:var(--gold-bright);font-weight:700;font-size:11.5px;letter-spacing:.5px;
+    background:rgba(201,162,75,.1);border:1px solid rgba(201,162,75,.45);border-radius:6px;
+    padding:5px 6px;margin:6px 0 4px;
+  }
+  .log-name{color:#7ec4e8;font-weight:800;}
+  .log-role{
+    display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;
+    border-radius:50%;font-size:8.5px;font-weight:800;color:#fff;margin-right:3px;vertical-align:middle;flex-shrink:0;
+  }
+  .log-role.sb{background:#3a6ea5;}
+  .log-role.bb{background:var(--red);}
+  .log-card-sym{font-weight:800;margin:0 2px;}
+  .log-card-sym.red{color:var(--red);}
 
-  #nextHandBar{max-width:680px;margin:0 auto 30px;text-align:center;display:none;}
+  #nextHandBar{position:relative;z-index:16;max-width:680px;margin:0 auto 30px;text-align:center;display:none;}
   #nextHandBar.show{display:block;}
   #nextHandBar button{padding:13px 34px;border-radius:10px;border:none;cursor:pointer;
     background:linear-gradient(180deg,var(--gold-bright),var(--gold));color:var(--ink);font-weight:700;font-size:15px;}
@@ -199,20 +309,21 @@
     background:#16302554;border:1px solid #2c5345;color:var(--cream);
     padding:8px 14px;border-radius:999px;cursor:pointer;font-size:12px;backdrop-filter:blur(2px);}
   .hand-rank-toggle:hover{border-color:var(--gold);}
-  .hand-rank-panel{position:fixed;top:calc(122px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));width:230px;z-index:24;
+  .hand-rank-panel{position:fixed;top:calc(122px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));width:200px;z-index:24;
+    max-height:calc(100vh - 150px);overflow-y:auto;
     background:rgba(10,20,16,.94);border:1px solid #2c5345;border-radius:12px;
-    padding:14px 16px;box-shadow:0 20px 50px rgba(0,0,0,.5);}
+    padding:12px 14px;box-shadow:0 20px 50px rgba(0,0,0,.5);}
   .hand-rank-panel.hidden{display:none;}
-  .hr-title{font-size:13px;color:var(--gold-bright);font-weight:700;margin-bottom:10px;letter-spacing:.5px;}
+  .hr-title{font-size:13px;color:var(--gold-bright);font-weight:700;margin-bottom:8px;letter-spacing:.5px;}
   .hr-list{list-style:none;margin:0;padding:0;}
-  .hr-list li{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px dashed #18301f;}
+  .hr-list li{display:flex;gap:7px;align-items:center;padding:5px 0;border-bottom:1px dashed #18301f;}
   .hr-list li:last-child{border:none;}
-  .hr-rank{flex-shrink:0;width:18px;height:18px;border-radius:50%;margin-top:1px;
-    background:var(--gold);color:var(--ink);font-size:10px;font-weight:800;
+  .hr-rank{flex-shrink:0;width:15px;height:15px;border-radius:50%;
+    background:var(--gold);color:var(--ink);font-size:9px;font-weight:800;
     display:flex;align-items:center;justify-content:center;}
-  .hr-text{display:flex;flex-direction:column;gap:2px;}
-  .hr-name{font-size:12.5px;font-weight:700;color:var(--cream);}
-  .hr-desc{font-size:11px;color:var(--muted);line-height:1.4;}
+  .hr-text{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;}
+  .hr-name{font-size:11.5px;font-weight:700;color:var(--cream);}
+  .hr-example{display:flex;gap:2px;}
 
 
 
@@ -241,7 +352,7 @@
   <div class="field" id="joinField">
     <label>你的名字</label>
     <div class="join-row">
-      <input type="text" id="nameInput" placeholder="输入名字" maxlength="10">
+      <input type="text" id="nameInput" placeholder="输入名字" maxlength="16">
       <button id="joinBtn">加入</button>
     </div>
   </div>
@@ -262,6 +373,10 @@
       <label>起始筹码 / 盲注</label>
       <div class="pill-row" id="stackPicker"></div>
     </div>
+    <div class="field">
+      <label>AI难度</label>
+      <div class="pill-row" id="difficultyPicker"></div>
+    </div>
     <div class="field" style="display:flex;gap:10px;">
       <button class="lobby-btn secondary" id="addAIBtn">+ 添加AI</button>
       <button class="lobby-btn" id="startGameBtn" style="margin-left:auto;">开始游戏</button>
@@ -271,15 +386,18 @@
 
 <div id="game">
   <div class="topbar">
-    <h2>德州扑克 · <span class="display" id="handCounter">第 1 手</span><span class="blinds-label" id="blindsLabel"></span><span class="game-timer" id="gameTimer"></span></h2>
+    <h2>德州扑克 · <span class="display" id="handCounter">第 1 手</span><span class="blinds-label" id="blindsLabel"></span></h2>
+    <div class="game-timer-center" id="gameTimer">⏱ 00:00</div>
     <div class="btns">
       <span class="conn-pill ok" id="connPill">已连接</span>
-      <button id="logToggle">显示日志</button>
+      <button id="settingsBtn">⚙️ 设置</button>
+      <button id="pauseBtn" style="display:none;">⏸️ 暂停</button>
     </div>
   </div>
 
   <div class="table-wrap">
     <div class="felt"></div>
+    <div class="table-brand">TEXAS HOLD'EM</div>
     <div class="center-area">
       <div class="community" id="community"></div>
       <div class="pot-display" id="potDisplay">
@@ -305,18 +423,47 @@
 
   <div id="nextHandBar"><button id="nextHandBtn">开始下一手</button></div>
 
-  <div id="logPanel"></div>
+  <div id="logPanel">
+    <div class="log-header" id="logHeader">
+      <span>牌局记录</span>
+      <span class="log-collapse-icon" id="logCollapseIcon">▾</span>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+</div>
+
+<div id="pauseOverlay">
+  <div class="pause-title">游戏已暂停</div>
+  <div class="pause-sub">点击"恢复"继续游戏</div>
+  <button id="pauseResumeBtn" class="pause-resume-btn">▶️ 恢复</button>
+</div>
+
+<div id="settingsPanel" class="settings-panel">
+  <div class="settings-title">游戏设置</div>
+  <div class="settings-section">
+    <label class="setting-row">
+      <span>语音播报</span>
+      <select id="settingVoice">
+        <option value="0">开启</option>
+        <option value="1">关闭</option>
+      </select>
+    </label>
+    <label class="setting-row">
+      <span>音效/音乐</span>
+      <select id="settingSFX">
+        <option value="0">开启</option>
+        <option value="1">关闭</option>
+      </select>
+    </label>
+  </div>
+  <button class="settings-close" onclick="document.getElementById('settingsPanel').classList.remove('show')">关闭</button>
 </div>
 
 <button id="handRankToggle" class="hand-rank-toggle">牌型表</button>
 <div id="handRankPanel" class="hand-rank-panel hidden">
-  <div class="hr-title">牌型大小（从高到低）</div>
+  <div class="hr-title">牌型大小</div>
   <ol class="hr-list" id="handRankList"></ol>
 </div>
-
-
-
-<div id="pauseOverlay"><div class="pause-title">⏸️ 游戏已暂停</div><div class="pause-sub">点击"恢复"继续游戏</div></div>
 
 <script>
 // ============================================================
@@ -325,16 +472,16 @@
 const RANK_LABEL = {11:'J',12:'Q',13:'K',14:'A'};
 const SUIT_SYMBOL = {s:'♠',h:'♥',d:'♦',c:'♣'};
 const HAND_NAMES = ['高牌','一对','两对','三条','顺子','同花','葫芦','四条','同花顺'];
-const HAND_DESCRIPTIONS = [
-  '5张互不相关的牌，比最大的单张',
-  '2张点数相同的牌',
-  '两组不同点数的对子',
-  '3张点数相同的牌',
-  '5张连续点数，花色不限',
-  '5张同一花色，点数不连续',
-  '3张相同点数 + 1对',
-  '4张点数相同的牌',
-  '同一花色的连续5张，A-K-Q-J-10 为皇家同花顺',
+const HAND_EXAMPLES = [
+  [{r:13,s:'s'},{r:11,s:'d'},{r:8,s:'c'},{r:5,s:'h'},{r:2,s:'s'}],
+  [{r:13,s:'s'},{r:13,s:'d'},{r:9,s:'c'},{r:6,s:'h'},{r:2,s:'s'}],
+  [{r:13,s:'s'},{r:13,s:'d'},{r:9,s:'c'},{r:9,s:'h'},{r:2,s:'s'}],
+  [{r:13,s:'s'},{r:13,s:'d'},{r:13,s:'c'},{r:9,s:'h'},{r:2,s:'s'}],
+  [{r:9,s:'s'},{r:10,s:'d'},{r:11,s:'c'},{r:12,s:'h'},{r:13,s:'s'}],
+  [{r:2,s:'s'},{r:6,s:'s'},{r:9,s:'s'},{r:11,s:'s'},{r:13,s:'s'}],
+  [{r:13,s:'s'},{r:13,s:'d'},{r:13,s:'c'},{r:9,s:'h'},{r:9,s:'s'}],
+  [{r:13,s:'s'},{r:13,s:'d'},{r:13,s:'c'},{r:13,s:'h'},{r:9,s:'s'}],
+  [{r:9,s:'s'},{r:10,s:'s'},{r:11,s:'s'},{r:12,s:'s'},{r:13,s:'s'}],
 ];
 
 // ============================================================
@@ -531,27 +678,46 @@ const VOICE = (() => {
     CACHE.set(key,p);
     return p;
   }
-  function speakTTS(actionType, equity, playerName){
-    const text=TTS_TEXT[actionType]; if(!text||!('speechSynthesis' in window)) return;
+  // 语速/音量固定，只按玩家名字给一个小音高偏移区分同性别的不同玩家——
+  // 之前还按AI自己算出的胜率去调语速/音量/音高，听起来很假，已经去掉（跟单机版一致）
+  function flushPending(){
+    if(pending && !muted){ const n=pending; pending=null; playBase(n.base, n.g, n.name); }
+  }
+  function speakTTS(actionType, playerName){
+    const text=TTS_TEXT[actionType];
+    if(!text || !('speechSynthesis' in window)){ speaking=false; flushPending(); return; }
     speechSynthesis.cancel();
     const utter=new SpeechSynthesisUtterance(text); utter.lang='en-US';
     const pOff=pitchOffsetFor(playerName);
-    if(equity!=null){ const cc=Math.max(0,Math.min(1,equity)); utter.rate=0.85+cc*0.45; utter.volume=0.55+cc*0.45; utter.pitch=(1.15-cc*0.3)+pOff*0.5; }
-    else{ utter.rate=1; utter.volume=0.85; utter.pitch=1+pOff*0.5; }
+    utter.rate=1; utter.volume=0.85; utter.pitch=1+pOff*0.5;
+    utter.onend=()=>{ speaking=false; flushPending(); };
+    utter.onerror=()=>{ speaking=false; flushPending(); };
     speechSynthesis.speak(utter);
   }
-  function speakNow(base, g, equity, playerName){
-    if(useTTSFallback){ speakTTS(base, equity, playerName); return; }
+  function speakNow(base, g, playerName){
+    if(useTTSFallback){ speakTTS(base, playerName); return; }
     getBuffer(base,g).then(buffer=>{
-      if(!buffer||muted){ if(!buffer&&!useTTSFallback){ useTTSFallback=true; speakTTS(base, equity, playerName); } return; }
+      if(!buffer||muted){
+        if(!buffer&&!useTTSFallback){ useTTSFallback=true; speakTTS(base, playerName); }
+        else{ speaking=false; flushPending(); }
+        return;
+      }
       const c=ensureCtx(); const source=c.createBufferSource(); source.buffer=buffer; const gain=c.createGain();
       const pOff=pitchOffsetFor(playerName);
-      if(equity!=null){ const cc=Math.max(0,Math.min(1,equity)); source.playbackRate.value=(0.85+cc*0.45)*(1+pOff*0.3); gain.gain.value=0.55+cc*0.45; }
-      else{ source.playbackRate.value=1*(1+pOff*0.3); gain.gain.value=0.85; }
+      source.playbackRate.value=1*(1+pOff*0.3); gain.gain.value=0.85;
       source.detune.value=pOff*200; source.connect(gain).connect(c.destination);
-      speaking=true; source.onended=()=>{ speaking=false; if(pending&&!muted){ const n=pending; pending=null; speakNow(n.base,n.g,n.equity,n.name); } };
+      source.onended=()=>{ speaking=false; flushPending(); };
       source.start();
-    }).catch(()=>{ if(!useTTSFallback){ useTTSFallback=true; speakTTS(base, equity, playerName); } });
+    }).catch(()=>{
+      if(!useTTSFallback){ useTTSFallback=true; speakTTS(base, playerName); }
+      else{ speaking=false; flushPending(); }
+    });
+  }
+  // 同步占位 speaking=true 再异步播放，避免两次紧邻的 speak() 调用都在 getBuffer()
+  // 的 Promise 微任务落地前看到 speaking===false，导致两段语音同时起播
+  function playBase(base, g, playerName){
+    speaking=true;
+    speakNow(base, g, playerName);
   }
   function preload(){
     const g='m';
@@ -560,13 +726,13 @@ const VOICE = (() => {
       if(!CACHE.has(key)){ const p=fetch(url(base,g)).then(r=>r.arrayBuffer()).then(b=>ensureCtx().decodeAudioData(b)).catch(()=>{}); CACHE.set(key,p); }
     });
   }
-  function speak(actionType, equity, gender, playerName){
+  function speak(actionType, gender, playerName){
     if(muted) return;
     const base=FILE_MAP[actionType];
     if(!base) return;
     const g=gender||'m';
-    if(speaking){ pending={base,g,equity,name:playerName||''}; return; }
-    speakNow(base, g, equity, playerName||'');
+    if(speaking){ pending={base,g,name:playerName||''}; return; }
+    playBase(base, g, playerName||'');
   }
   function waitForSilence(){
     if(!speaking) return Promise.resolve();
@@ -574,6 +740,7 @@ const VOICE = (() => {
   }
   return {
     speak,
+    preload,
     isMuted(){ return muted; },
     isBusy(){ return speaking; },
     waitForSilence,
@@ -597,59 +764,148 @@ document.addEventListener('pointerdown', tryStartAudio, {once:true});
 // ============================================================
 // 渲染用的小工具（跟单机版一致：座位椭圆布局、动态字号、卡片元素）
 // ============================================================
-function cardEl(card){
+function cardEl(card, opts={}){
   const div=document.createElement('div');
   const isRed=['h','d'].includes(card.s);
-  div.className='card'+(isRed?' red':'');
+  div.className='card'+(opts.mini?' mini':'')+(isRed?' red':'');
   const rl=RANK_LABEL[card.r]||card.r;
   const sym=SUIT_SYMBOL[card.s];
   div.innerHTML=`<span class="c-rank c-rank-tl"><span>${rl}</span><span class="c-sym">${sym}</span></span><span class="c-center">${sym}</span><span class="c-rank c-rank-br"><span>${rl}</span><span class="c-sym">${sym}</span></span>`;
   return div;
 }
-function chipDots(stack, bb){
-  if(stack<=0) return '';
-  const count=Math.min(10, Math.max(1, Math.ceil(Math.min(stack, Math.max(2, Math.floor(stack/bb)*2))/3)));
-  let html='';
-  for(let i=0;i<count;i++) html+=`<span class="chip-dot c${i%5+1}"></span>`;
-  if(count>=10) html+='<span style="font-size:0.5em;color:var(--muted)">+</span>';
-  return html;
+// 下注筹码的视觉堆叠：颜色和层数都按"相对大盲的倍数"给，不追求跟真实面额一一对应，
+// 只是为了让下注金额有个直观、好看的筹码堆形象（跟单机版一致）
+const CHIP_COLORS=['#e8e2d0','#b5402f','#2255aa','#2f7d4f','#1c1c1c','#6b3fa0'];
+function chipStackFor(amount, bigBlind){
+  const bbMult = amount / Math.max(1, bigBlind);
+  const colorIdx = bbMult>=50 ? 5 : bbMult>=20 ? 4 : bbMult>=8 ? 3 : bbMult>=3 ? 2 : bbMult>=1 ? 1 : 0;
+  const count = Math.min(5, Math.max(1, Math.round(1+Math.log2(1+bbMult))));
+  return {color:CHIP_COLORS[colorIdx], count};
+}
+function chipStackHtml(amount, bigBlind){
+  const {color, count} = chipStackFor(amount, bigBlind);
+  return Array.from({length:count}).map(()=>`<div class="chip" style="background:${color}"></div>`).join('');
+}
+// 只给自己这个座位做"推筹码"动画：从自己筹码堆的位置滑/落到下注徽章的位置，
+// 其他座位（包括AI）不需要这个环节，直接显示静态筹码堆即可
+function animateChipPush(seatId, bet, bigBlind){
+  const seatEl=document.querySelector(`.seat[data-seat-id="${seatId}"]`);
+  if(!seatEl || !bet) return;
+  const stackEl=seatEl.querySelector('.seat-stack');
+  const card=seatEl.querySelector('.seat-card');
+  if(!stackEl || !card) return;
+  const fromRect=stackEl.getBoundingClientRect();
+  const cardRect=card.getBoundingClientRect();
+  const toX=cardRect.left+cardRect.width/2;
+  const toY=cardRect.bottom+6;
+
+  const flying=document.createElement('div');
+  flying.className='chip-stack flying-chip-stack';
+  flying.style.position='fixed';
+  flying.style.left=(fromRect.left+fromRect.width/2)+'px';
+  flying.style.top=fromRect.top+'px';
+  flying.style.transform='translate(-50%,0)';
+  flying.style.zIndex='200';
+  flying.style.transition='left .35s ease, top .35s ease, opacity .35s ease';
+  flying.innerHTML=chipStackHtml(bet, bigBlind);
+  document.body.appendChild(flying);
+  requestAnimationFrame(()=>{ flying.style.left=toX+'px'; flying.style.top=toY+'px'; });
+  setTimeout(()=>flying.remove(), 420);
 }
 function ellipseFracs(w){
-  return w<440 ? {rx:0.34, ry:0.37} : {rx:0.42, ry:0.40};
+  // 窄屏下座位卡片相对桌宽占比更大，半径系数收一点，避免卡片贴边被裁切
+  return w<440 ? {rx:0.36, ry:0.38} : {rx:0.43, ry:0.41};
 }
-function seatPosition(i, n, w, h){
+// 椭圆周长上"等弧长"分布用的累积弧长表：扁椭圆下，角度等分会让座位在长轴两端
+// （参数化速度最慢的地方）挤在一起，必须按弧长而不是角度来等分才会视觉均匀
+function buildEllipseArcTable(rx, ry){
+  const STEPS=360;
+  const cum=[0];
+  let prevX=rx, prevY=0;
+  for(let s=1;s<=STEPS;s++){
+    const t=(Math.PI*2*s)/STEPS;
+    const x=rx*Math.cos(t), y=ry*Math.sin(t);
+    cum.push(cum[s-1]+Math.hypot(x-prevX, y-prevY));
+    prevX=x; prevY=y;
+  }
+  return {cum, total:cum[STEPS], steps:STEPS};
+}
+function angleForArcFraction(table, frac){
+  const target=(((frac%1)+1)%1) * table.total;
+  let lo=0, hi=table.steps;
+  while(lo<hi){ const mid=(lo+hi)>>1; if(table.cum[mid]<target) lo=mid+1; else hi=mid; }
+  const idx=Math.max(1, Math.min(table.steps, lo));
+  const span=table.cum[idx]-table.cum[idx-1] || 1;
+  const segFrac=(target-table.cum[idx-1])/span;
+  return ((idx-1+segFrac)/table.steps) * Math.PI*2;
+}
+function seatPosition(i, n, w, h, arcTable){
+  // 椭圆等弧长分布，起点在底部偏左，顺时针
   const {rx:rxFrac, ry:ryFrac} = ellipseFracs(w);
-  const angle = (Math.PI*2*i/n) + Math.PI/2;
   const rx = w*rxFrac, ry = h*ryFrac;
+  const table = arcTable || buildEllipseArcTable(rx, ry);
+  const angle = angleForArcFraction(table, i/n) + Math.PI/2;
   const cx = w/2, cy = h/2;
   return { x: cx + rx*Math.cos(angle), y: cy + ry*Math.sin(angle) };
 }
-function computeSeatSize(n, w, h){
+function computeSeatSize(n, w, h, arcTable){
   const {rx:rxFrac, ry:ryFrac} = ellipseFracs(w);
   const rx=w*rxFrac, ry=h*ryFrac;
+  const table = arcTable || buildEllipseArcTable(rx, ry);
   let minDist=Infinity;
   for(let i=0;i<n;i++){
-    const a1=(Math.PI*2*i/n)+Math.PI/2;
-    const a2=(Math.PI*2*((i+1)%n)/n)+Math.PI/2;
+    const a1=angleForArcFraction(table, i/n)+Math.PI/2;
+    const a2=angleForArcFraction(table, ((i+1)%n)/n)+Math.PI/2;
     const dx=rx*(Math.cos(a2)-Math.cos(a1));
     const dy=ry*(Math.sin(a2)-Math.sin(a1));
     minDist=Math.min(minDist, Math.hypot(dx,dy));
   }
-  const width=Math.max(64, Math.min(148, minDist*0.74));
-  const fontSize=Math.max(8.5, Math.min(13, width*0.088));
+  const width=Math.max(64, Math.min(168, minDist*0.74));
+  const fontSize=Math.max(8.5, Math.min(14, width*0.088));
   return { width, fontSize };
+}
+function sizeTableWrap(wrap){
+  // 桌子尺寸完全由JS算出来贴满可用视口（而不是CSS定死一个尺寸），
+  // 4K大屏下也能用满空间，小屏/手机下又不会顶到操作面板
+  const topbar=document.querySelector('.topbar');
+  const topbarH = topbar ? topbar.getBoundingClientRect().height : 60;
+  const reserveBelow = 270;
+  const availW = Math.max(280, window.innerWidth - 28);
+  const availH = Math.max(220, window.innerHeight - topbarH - reserveBelow);
+  const RATIO = 1.86;
+  let w = Math.min(availW, 1600, availH*RATIO);
+  w = Math.max(w, 300);
+  const h = w/RATIO;
+  wrap.style.width = w+'px';
+  wrap.style.height = h+'px';
 }
 function formatBB(x){
   if(!isFinite(x) || x<0) return '0';
   const rounded = Math.round(x*10)/10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
+// 跟单机版一致：把 lastActionType/lastActionAmount 格式化成给人看的文字
+function formatAction(type, amount){
+  if(!type) return '';
+  if(type==='fold') return '弃牌';
+  if(type==='check') return '过牌';
+  if(type==='call') return `跟注 ${amount}`;
+  if(type==='raise') return `加注到 ${amount}`;
+  if(type==='allin') return `全下 ${amount}`;
+  return '';
+}
 function buildHandRankPanel(){
   const list=document.getElementById('handRankList');
   list.innerHTML='';
   for(let i=HAND_NAMES.length-1;i>=0;i--){
     const li=document.createElement('li');
-    li.innerHTML = `<span class="hr-rank">${HAND_NAMES.length-i}</span><span class="hr-text"><span class="hr-name">${HAND_NAMES[i]}</span><span class="hr-desc">${HAND_DESCRIPTIONS[i]}</span></span>`;
+    const rankBadge=document.createElement('span'); rankBadge.className='hr-rank'; rankBadge.textContent=HAND_NAMES.length-i;
+    const textWrap=document.createElement('span'); textWrap.className='hr-text';
+    textWrap.innerHTML = `<span class="hr-name">${HAND_NAMES[i]}</span>`;
+    const exampleRow=document.createElement('div'); exampleRow.className='hr-example';
+    HAND_EXAMPLES[i].forEach(c=>exampleRow.appendChild(cardEl(c,{mini:true})));
+    textWrap.appendChild(exampleRow);
+    li.appendChild(rankBadge); li.appendChild(textWrap);
     list.appendChild(li);
   }
 }
@@ -803,13 +1059,16 @@ function getHintAdvice(equity, toCall, pot, hole, board, numOpponents){
 // ============================================================
 let gameStartTime=null;
 let gameTimerInterval=null;
+let pausedAccumMs=0;
+let pauseStartedAt=null;
+let gamePaused=false;
 let ws=null;
 let mySeatId=null;
 let isHost=false;
 let lobby=null; // 最近一次收到的 lobbyState
 let gameState=null; // 最近一次收到的 gameState
 let log=[];
-let chosenTableSize=6, chosenStack=1000, chosenSB=5, chosenBB=10;
+let chosenTableSize=6, chosenStack=1000, chosenSB=5, chosenBB=10, chosenAIDifficulty='normal';
 
 function getReconnectToken(){ return sessionStorage.getItem('reconnectToken'); }
 function setReconnectToken(t){ sessionStorage.setItem('reconnectToken', t); }
@@ -837,64 +1096,71 @@ function setConnPill(ok){
 }
 
 let prevStage=null;
+function startGameTimerIfNeeded(){
+  if(gameStartTime) return;
+  gameStartTime=Date.now();
+  pausedAccumMs=0; pauseStartedAt=null;
+  if(gameTimerInterval) clearInterval(gameTimerInterval);
+  gameTimerInterval=setInterval(()=>{
+    const el=document.getElementById('gameTimer');
+    if(el&&gameStartTime){
+      const pausedNow = pauseStartedAt ? (Date.now()-pauseStartedAt) : 0;
+      const s=Math.floor((Date.now()-gameStartTime-pausedAccumMs-pausedNow)/1000);
+      const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0');
+      el.textContent='⏱ '+mm+':'+ss;
+    }
+  },1000);
+}
 function handleMessage(msg){
   switch(msg.type){
-    case 'lobbyState': lobby=msg; renderLobby(); if(msg.phase!=='lobby') showGameScreen(); break;
+    case 'lobbyState':
+      lobby=msg; renderLobby(); if(msg.phase!=='lobby') showGameScreen();
+      break;
     case 'joined': mySeatId=msg.seatId; isHost=msg.isHost; setReconnectToken(msg.reconnectToken); renderLobby(); break;
     case 'gameState': {
-      const oldStage=prevStage; if(!oldStage&&msg.stage){ VOICE.preload&&VOICE.preload(); if(!gameStartTime){ gameStartTime=Date.now(); if(gameTimerInterval) clearInterval(gameTimerInterval); gameTimerInterval=setInterval(()=>{ const el=document.getElementById('gameTimer'); if(el&&gameStartTime){ const s=Math.floor((Date.now()-gameStartTime)/1000); el.textContent=s>=60?Math.floor(s/60)+'m'+(s%60)+'s':s+'s'; } },1000); } }
+      const oldStage=prevStage;
+      if(!oldStage&&msg.stage){ VOICE.preload&&VOICE.preload(); startGameTimerIfNeeded(); }
+      if(typeof msg.paused==='boolean' && msg.paused!==gamePaused) applyPauseState(msg.paused);
       gameState=msg; showGameScreen(); renderGame();
-      if(!oldStage && msg.stage==='preflop'){ SFX.deal(); VOICE.speak('new_hand', null, playerGender, (msg.players.find(p=>p.id===msg.yourSeatId)||{}).name); }
+      document.getElementById('pauseBtn').style.display = isHost ? 'inline-block' : 'none';
+      if(!oldStage && msg.stage==='preflop'){ SFX.deal(); VOICE.speak('new_hand', playerGender, (msg.players.find(p=>p.id===msg.yourSeatId)||{}).name); }
       else if(oldStage!==msg.stage && (msg.stage==='flop'||msg.stage==='turn'||msg.stage==='river')){
         SFX.deal();
         const voiceMap={flop:'flop',turn:'turn_card',river:'river'};
-        VOICE.speak(voiceMap[msg.stage], null, playerGender, (msg.players.find(p=>p.id===msg.yourSeatId)||{}).name);
+        VOICE.speak(voiceMap[msg.stage], playerGender, (msg.players.find(p=>p.id===msg.yourSeatId)||{}).name);
       }
       prevStage=msg.stage;
       break;
     }
+    case 'pauseState': applyPauseState(!!msg.paused); break;
     case 'yourTurn': {
       showGameScreen(); renderActionPanel(msg);
       const myP = gameState && gameState.players.find(p=>p.id===gameState.yourSeatId);
-      VOICE.speak('your_turn', null, playerGender, myP ? myP.name : 'Player');
+      VOICE.speak('your_turn', playerGender, myP ? myP.name : 'Player');
       break;
     }
     case 'dealt': SFX.deal(); break;
     case 'win': handleWin(msg); break;
     case 'actionTaken': handleActionTaken(msg); break;
-    case 'logLine': {
-      const txt=msg.text||'';
-      let cls='';
-      if(/_ /){} // placeholder for detection below
-      if(txt.includes('弃牌')||txt.includes('过牌')||txt.includes('跟注')||txt.includes('加注')||txt.includes('全下')) cls='entry-action';
-      else if(txt.includes('获得彩池')||txt.includes('赢得')) cls='entry-win';
-      else if(txt.includes('翻牌前')||txt.includes('翻牌')||txt.includes('转牌')||txt.includes('河牌')||txt.includes('手开始')||txt.includes('BB')) ;
-      log.push(cls ? cls+'::'+txt : txt); renderLog();
-      break;
-    }
+    case 'logLine': log.push(msg.text||''); renderLog(); break;
     case 'handEnded': document.getElementById('actionPanel').classList.remove('show'); showNextHandBar(false); break;
     case 'gameOver': if(gameTimerInterval){ clearInterval(gameTimerInterval); gameTimerInterval=null; } showGameOver(msg); break;
     case 'needMoreAI': handleNeedMoreAI(msg); break;
     case 'error': alert(msg.message||'操作失败'); break;
   }
 }
-function actionTypeFromLastAction(la){
-  if(la.startsWith('弃牌')) return 'fold';
-  if(la.startsWith('过牌')) return 'check';
-  if(la.startsWith('跟注')) return 'call';
-  if(la.startsWith('全下')) return 'allin';
-  if(la.startsWith('加注')) return 'raise';
-  return null;
-}
 function handleActionTaken(msg){
-  const actionType=actionTypeFromLastAction(msg.lastAction||'');
+  const actionType=msg.lastActionType;
   if(actionType==='fold') SFX.fold();
   else if(actionType==='check') SFX.check();
   else if(actionType==='call') SFX.chip();
   else if(actionType==='raise'||actionType==='allin') SFX.raise();
   if(actionType){
     const g = msg.isHuman ? playerGender : genderForAI(msg.name);
-    VOICE.speak(actionType, msg.equity, g, msg.name);
+    VOICE.speak(actionType, g, msg.name);
+    if((actionType==='call'||actionType==='raise'||actionType==='allin') && msg.seatId===mySeatId){
+      animateChipPush(msg.seatId, msg.lastActionAmount, gameState ? gameState.bigBlind : 1);
+    }
   }
 }
 function handleWin(msg){
@@ -902,7 +1168,7 @@ function handleWin(msg){
   if(iWon){ SFX.win(); } else{ SFX.lose(); }
   if(iWon && gameState){
     const myP = (gameState.players||[]).find(p=>p.id===gameState.yourSeatId);
-    if(myP) VOICE.speak('winner', 0.95, playerGender, myP.name);
+    if(myP) VOICE.speak('winner', playerGender, myP.name);
   }
 }
 
@@ -940,10 +1206,23 @@ function buildStackPicker(){
     el.appendChild(b);
   });
 }
+function buildDifficultyPicker(){
+  const el=document.getElementById('difficultyPicker');
+  el.innerHTML='';
+  const opts=[['beginner','小白AI'],['normal','正常AI'],['hell','地狱AI']];
+  opts.forEach(([value,label])=>{
+    const b=document.createElement('div');
+    b.className='pill'+(value===chosenAIDifficulty?' active':'');
+    b.textContent=label;
+    b.onclick=()=>{ chosenAIDifficulty=value; send({type:'setAIDifficulty', difficulty:value}); buildDifficultyPicker(); };
+    el.appendChild(b);
+  });
+}
 function renderLobby(){
   if(!lobby) return;
   chosenTableSize=lobby.tableSize;
   chosenStack=lobby.tableOptions.stack; chosenSB=lobby.tableOptions.smallBlind; chosenBB=lobby.tableOptions.bigBlind;
+  chosenAIDifficulty=lobby.tableOptions.aiDifficulty||'normal';
 
   document.getElementById('joinField').style.display = mySeatId==null ? 'block' : 'none';
 
@@ -973,6 +1252,7 @@ function renderLobby(){
   if(isHost){
     buildTableSizePicker();
     buildStackPicker();
+    buildDifficultyPicker();
     const emptyCount = lobby.seats.filter(s=>s.status==='empty').length;
     document.getElementById('addAIBtn').disabled = emptyCount===0;
   }
@@ -1032,17 +1312,20 @@ function renderGame(){
   const seatsContainer=document.getElementById('seats');
   seatsContainer.innerHTML='';
   const wrap=document.querySelector('.table-wrap');
-  wrap.style.height='';
+  sizeTableWrap(wrap);
   const w=wrap.clientWidth;
   let h=wrap.clientHeight;
   const n=gameState.players.length;
-  let seatSize=computeSeatSize(n, w, h);
+  const {rx:rxFrac, ry:ryFrac} = ellipseFracs(w);
+  let arcTable=buildEllipseArcTable(w*rxFrac, h*ryFrac);
+  let seatSize=computeSeatSize(n, w, h, arcTable);
   if(seatSize.width<80){
-    const maxH=Math.min(window.innerHeight*0.78, 620);
+    const maxH=Math.min(window.innerHeight*0.78, 900);
     let guard=0;
     while(seatSize.width<80 && h<maxH && guard<8){
       h=Math.min(maxH, h*1.15);
-      seatSize=computeSeatSize(n, w, h);
+      arcTable=buildEllipseArcTable(w*rxFrac, h*ryFrac);
+      seatSize=computeSeatSize(n, w, h, arcTable);
       guard++;
     }
     wrap.style.height=h+'px';
@@ -1052,11 +1335,12 @@ function renderGame(){
   // 数组下标 i 只用来算椭圆上的几何位置（必须是连续的0..n-1），逻辑判断（是不是我/
   // 是不是庄家/轮到谁）一律要用 p.id 去对比 gameState 里发来的座位号，不能用 i。
   gameState.players.forEach((p,i)=>{
-    const pos=seatPosition(i,n,w,h);
+    const pos=seatPosition(i,n,w,h,arcTable);
     const seat=document.createElement('div');
     const actingNow = p.id===gameState.actingSeatId && !p.folded;
     const isMe = p.id===gameState.yourSeatId;
     seat.className='seat'+(isMe?' me':'')+(p.folded?' folded':'')+(actingNow?' acting':'');
+    seat.dataset.seatId=p.id;
     seat.style.left=pos.x+'px'; seat.style.top=pos.y+'px'; seat.style.width=seatSize.width+'px';
 
     const showCards = p.holeCards!=null;
@@ -1066,14 +1350,14 @@ function renderGame(){
 
     const meTag = isMe ? '<span class="tag">你</span>' : '';
     const roleTags = (p.id===gameState.sbIdx?'<span class="role-tag sb">小盲</span>':'') + (p.id===gameState.bbIdx?'<span class="role-tag bb">大盲</span>':'');
-    const actionText = actingNow ? (isMe?'等待你操作…':`${p.name} 思考中…`) : (p.lastAction||'');
-    const betChip = p.bet>0 ? `<div class="bet-chip">下注 ${p.bet} <span class="bet-bb">· ${formatBB(p.bet/gameState.bigBlind)}BB</span></div>` : '';
+    const actionText = actingNow ? (isMe?'等待你操作…':`${p.name} 思考中…`) : formatAction(p.lastActionType, p.lastActionAmount);
+    const betChip = p.bet>0 ? `<div class="bet-chip"><div class="chip-stack">${chipStackHtml(p.bet, gameState.bigBlind)}</div><div class="bet-label">下注 ${p.bet} <span class="bet-bb">· ${formatBB(p.bet/gameState.bigBlind)}BB</span></div></div>` : '';
 
     seat.innerHTML = `
       <div class="seat-card" style="font-size:${seatSize.fontSize}px">
         ${p.id===gameState.dealerIdx ? '<div class="dealer-btn" title="庄家">D</div>' : ''}
         <div class="seat-name">${p.name}${meTag}${roleTags}</div>
-        <div class="seat-stack"><span class="chip-dots">${gameState ? chipDots(p.stack, gameState.bigBlind) : ''}</span>筹码 ${p.stack}${p.allIn?' <span class="allin-badge">ALL IN</span>':''}</div>
+        <div class="seat-stack">筹码 ${p.stack}${p.allIn?' <span class="allin-badge">ALL IN</span>':''}</div>
         <div class="seat-cards">${cardsHtml}</div>
         <div class="seat-action${actingNow?' acting-text':''}">${actionText}</div>
         ${betChip}
@@ -1181,34 +1465,46 @@ function respond(action){
 }
 
 function renderLog(){
-  const panel=document.getElementById('logPanel');
-  panel.innerHTML = log.slice(-80).map(l=>{
+  const body=document.getElementById('logBody');
+  body.innerHTML = log.slice(-80).map(l=>{
     const idx=l.indexOf('::');
     if(idx>0){ const cls=l.slice(0,idx); const txt=l.slice(idx+2); return `<div class="entry ${cls}">${txt}</div>`; }
     return `<div class="entry">${l}</div>`;
   }).join('');
-  panel.scrollTop = panel.scrollHeight;
+  body.scrollTop = body.scrollHeight;
 }
-document.getElementById('logToggle').onclick = function(){
-  const panel=document.getElementById('logPanel');
-  const show = panel.style.display==='none' || !panel.style.display;
-  panel.style.display = show?'block':'none';
-  this.textContent = show?'隐藏日志':'显示日志';
+document.getElementById('logHeader').onclick = function(){
+  document.getElementById('logPanel').classList.toggle('collapsed');
 };
 
 // ============================================================
-// 音效开关 + 牌型表
+// 设置面板 + 暂停（暂停状态由服务器广播，房主点按钮发togglePause，
+// 所有人都会看到遮罩；真正冻结AI思考/真人操作倒计时在服务器端完成）
 // ============================================================
-
-let gamePaused=false;
-try{
+document.getElementById('settingsBtn').onclick = function(){
+  document.getElementById('settingsPanel').classList.toggle('show');
+};
+document.getElementById('settingVoice').onchange = function(){
+  const muted=this.value==='1';
+  if(VOICE.isMuted()!==muted) VOICE.toggleMute();
+};
+document.getElementById('settingSFX').onchange = function(){
+  const muted=this.value==='1';
+  if(SFX.isMuted()!==muted) SFX.toggleMute();
+};
 document.getElementById('pauseBtn').onclick = function(){
-  gamePaused=!gamePaused;
-  this.textContent = gamePaused ? '▶️ 恢复' : '⏸️ 暂停';
-  if(gamePaused){ document.getElementById('pauseOverlay').classList.add('show'); }
-  else{ document.getElementById('pauseOverlay').classList.remove('show'); if(gameState) renderGame(); }
+  send({type:'togglePause'});
 };
-}catch(e){}
+document.getElementById('pauseResumeBtn').onclick = function(){
+  send({type:'togglePause'});
+};
+function applyPauseState(paused){
+  gamePaused=paused;
+  document.getElementById('pauseBtn').textContent = paused ? '▶️ 恢复' : '⏸️ 暂停';
+  document.getElementById('pauseOverlay').classList.toggle('show', paused);
+  if(paused){ pauseStartedAt=Date.now(); }
+  else{ if(pauseStartedAt){ pausedAccumMs += Date.now()-pauseStartedAt; pauseStartedAt=null; } if(gameState) renderGame(); }
+}
 
 document.getElementById('handRankToggle').onclick = function(){
   document.getElementById('handRankPanel').classList.toggle('hidden');
