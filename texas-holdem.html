@@ -154,14 +154,6 @@
     border:2px solid rgba(201,162,75,.22);
     box-shadow:inset 0 0 0 7px rgba(201,162,75,.08);
   }
-  .felt::before{
-    content:"";position:absolute;left:0;right:0;top:50%;height:26px;transform:translateY(-50%);
-    background:
-      repeating-linear-gradient(45deg, rgba(201,162,75,.2) 0px, rgba(201,162,75,.2) 2px, transparent 2px, transparent 9px),
-      repeating-linear-gradient(-45deg, rgba(201,162,75,.2) 0px, rgba(201,162,75,.2) 2px, transparent 2px, transparent 9px);
-    border-top:1px solid rgba(201,162,75,.32);
-    border-bottom:1px solid rgba(201,162,75,.32);
-  }
   .table-brand{
     position:absolute;top:21%;left:50%;transform:translate(-50%,-50%);
     font-size:14px;letter-spacing:5px;color:rgba(201,162,75,.24);
@@ -272,11 +264,27 @@
     border:0.15em solid var(--gold);
   }
   .bet-chip{
-    position:absolute;bottom:-1.08em;left:50%;transform:translateX(-50%);
+    position:absolute;bottom:-1.9em;left:50%;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:0.2em;
+    pointer-events:none;
+  }
+  .bet-chip .bet-label{
     background:#241a0f;border:1px solid var(--gold);color:var(--gold-bright);
     font-size:0.85em;padding:0.15em 0.7em;border-radius:999px;white-space:nowrap;
   }
   .bet-chip .bet-bb{color:var(--muted);}
+  .chip-stack{display:flex;flex-direction:column;align-items:center;}
+  .chip{
+    width:1.5em;height:0.6em;border-radius:50%;flex-shrink:0;
+    box-shadow:0 0.1em 0 rgba(0,0,0,.35), inset 0 -0.07em 0.1em rgba(0,0,0,.3), inset 0 0.07em 0.1em rgba(255,255,255,.3);
+    position:relative;
+  }
+  .chip::after{
+    content:"";position:absolute;inset:0.09em;border-radius:50%;
+    border:0.09em dashed rgba(255,255,255,.55);
+  }
+  .chip+.chip{margin-top:-0.3em;}
+  .flying-chip-stack{pointer-events:none;}
 
   /* ---------- 操作面板 ---------- */
   #actionPanel{
@@ -1741,6 +1749,51 @@ function formatBB(x){
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
+// 下注筹码的视觉堆叠：颜色和层数都按"相对大盲的倍数"给，不追求跟真实面额一一对应，
+// 只是为了让下注金额有个直观、好看的筹码堆形象
+const CHIP_COLORS=['#e8e2d0','#b5402f','#2255aa','#2f7d4f','#1c1c1c','#6b3fa0'];
+function chipStackFor(amount, bigBlind){
+  const bbMult = amount / Math.max(1, bigBlind);
+  const colorIdx = bbMult>=50 ? 5 : bbMult>=20 ? 4 : bbMult>=8 ? 3 : bbMult>=3 ? 2 : bbMult>=1 ? 1 : 0;
+  const count = Math.min(5, Math.max(1, Math.round(1+Math.log2(1+bbMult))));
+  return {color:CHIP_COLORS[colorIdx], count};
+}
+function chipStackHtml(amount, bigBlind){
+  const {color, count} = chipStackFor(amount, bigBlind);
+  return Array.from({length:count}).map(()=>`<div class="chip" style="background:${color}"></div>`).join('');
+}
+
+// 只给真人玩家做"推筹码"动画：从自己筹码堆的位置滑/落到下注徽章的位置，
+// AI座位不需要这个环节，直接显示静态筹码堆即可
+function animateChipPush(p){
+  if(!p.isHuman || !p.bet) return;
+  const seatEl=document.querySelector(`.seat[data-player-id="${p.id}"]`);
+  if(!seatEl) return;
+  const stackEl=seatEl.querySelector('.seat-stack');
+  const card=seatEl.querySelector('.seat-card');
+  if(!stackEl || !card) return;
+  const fromRect=stackEl.getBoundingClientRect();
+  const cardRect=card.getBoundingClientRect();
+  const toX=cardRect.left+cardRect.width/2;
+  const toY=cardRect.bottom+6;
+
+  const flying=document.createElement('div');
+  flying.className='chip-stack flying-chip-stack';
+  flying.style.position='fixed';
+  flying.style.left=(fromRect.left+fromRect.width/2)+'px';
+  flying.style.top=fromRect.top+'px';
+  flying.style.transform='translate(-50%,0)';
+  flying.style.zIndex='200';
+  flying.style.transition='left .35s ease, top .35s ease, opacity .35s ease';
+  flying.innerHTML=chipStackHtml(p.bet, game.bigBlind);
+  document.body.appendChild(flying);
+  requestAnimationFrame(()=>{
+    flying.style.left=toX+'px';
+    flying.style.top=toY+'px';
+  });
+  setTimeout(()=>flying.remove(), 420);
+}
+
 function renderAll(){
   document.getElementById('handCounter').textContent = handLabel(game.handCount);
   applyLanguage();
@@ -1790,6 +1843,7 @@ function renderAll(){
     const seat=document.createElement('div');
     const actingNow = i===actingSeatId && !p.folded;
     seat.className='seat'+(p.isHuman?' human':'')+(p.folded?' folded':'')+(actingNow?' acting':'');
+    seat.dataset.playerId=p.id;
     seat.style.left=pos.x+'px';
     seat.style.top=pos.y+'px';
     seat.style.width=seatSize.width+'px';
@@ -1804,7 +1858,7 @@ function renderAll(){
     const humanTag = p.isHuman ? `<span class="tag">${privacyMode?T('player'):T('you')}</span>` : '';
     const roleTags = (i===game.sbIdx?`<span class="role-tag sb">${T('smallBlind')}</span>`:'') + (i===game.bbIdx?`<span class="role-tag bb">${T('bigBlind')}</span>`:'');
     const actionText = actingNow ? (p.isHuman?T('waiting'):`${p.name} ${T('thinking')}`) : formatAction(p.lastActionType, p.lastActionAmount);
-    const betChip = p.bet>0 ? `<div class="bet-chip">${T('bet')} ${p.bet} <span class="bet-bb">· ${formatBB(p.bet/game.bigBlind)}BB</span></div>` : '';
+    const betChip = p.bet>0 ? `<div class="bet-chip"><div class="chip-stack">${chipStackHtml(p.bet, game.bigBlind)}</div><div class="bet-label">${T('bet')} ${p.bet} <span class="bet-bb">· ${formatBB(p.bet/game.bigBlind)}BB</span></div></div>` : '';
 
     seat.innerHTML = `
       <div class="seat-card" style="font-size:${seatSize.fontSize}px">
@@ -2425,8 +2479,8 @@ function onGameUpdate(type, payload){
     const actionType=p.lastActionType;
     if(actionType==='fold'){ SFX.fold(); VOICE.speak(actionType, genderForPlayer(p), p.name); }
     else if(actionType==='check'){ SFX.check(); VOICE.speak(actionType, genderForPlayer(p), p.name); }
-    else if(actionType==='call'){ SFX.chip(); VOICE.speak(actionType, genderForPlayer(p), p.name); }
-    else if(actionType==='raise'||actionType==='allin'){ SFX.raise(); VOICE.speak(actionType, genderForPlayer(p), p.name); }
+    else if(actionType==='call'){ SFX.chip(); VOICE.speak(actionType, genderForPlayer(p), p.name); animateChipPush(p); }
+    else if(actionType==='raise'||actionType==='allin'){ SFX.raise(); VOICE.speak(actionType, genderForPlayer(p), p.name); animateChipPush(p); }
     // 给日志加行动标记，附带当前底池
     if(actionType){
       logPushStyled({type:'action', cls:'entry-action', role:game.roleOf(p.id), name:p.name, actionType:p.lastActionType, amount:p.lastActionAmount, pot:game.totalPot()});
