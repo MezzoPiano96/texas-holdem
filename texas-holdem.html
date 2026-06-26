@@ -128,9 +128,9 @@
 
   .table-wrap{
     position:relative;
-    width:min(96vw,980px);
-    height:560px;
-    margin:26px auto 10px;
+    width:min(94vw,1600px);
+    height:min(60vh,820px);
+    margin:20px auto 10px;
   }
   .table-wrap::before{
     content:"";position:absolute;inset:-10px;border-radius:50% / 45%;
@@ -162,7 +162,7 @@
   }
   .center-area{
     position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-    text-align:center;width:340px;z-index:3;
+    text-align:center;width:min(34vw,420px);min-width:240px;z-index:3;
   }
   .community{display:flex;gap:8px;justify-content:center;margin-bottom:10px;min-height:78px;}
   .pot-display{
@@ -454,11 +454,11 @@
   }
 
   @media (max-width:720px){
-    .table-wrap{height:min(60vh,480px);margin:14px auto 8px;}
+    .table-wrap{margin:14px auto 8px;}
     .card{width:38px;height:54px;font-size:15px;}
   }
   @media (max-height:700px){
-    .table-wrap{height:min(46vh,380px);margin:8px auto 6px;}
+    .table-wrap{margin:8px auto 6px;}
     .topbar{padding:7px 16px;}
     #actionPanel{padding:10px 16px;}
     .panel-head{margin-bottom:8px;}
@@ -491,8 +491,8 @@
   <div class="field">
     <label data-i18n="nickName"></label>
     <div class="name-inputs">
-      <input type="text" id="nameInput1" placeholder="玩家1" maxlength="12">
-      <input type="text" id="nameInput2" placeholder="玩家2" maxlength="12">
+      <input type="text" id="nameInput1" placeholder="玩家1" maxlength="16">
+      <input type="text" id="nameInput2" placeholder="玩家2" maxlength="16">
     </div>
   </div>
 
@@ -628,7 +628,7 @@ const LANG_DATA = {
   'zh-CN': {
     setupTitle: '德州扑克', setupSub: '选择人数和你想操控的 1-2 个座位，开局后由你操作所选座位，其余为AI对手。选择两个座位时会开启同屏轮流隐私模式，双方互不偷看手牌。',
     playerCount: '桌上人数', selectSeats: '你控制哪些座位（1-2 个）', stackBlinds: '起始筹码 / 盲注',
-    nickName: '玩家昵称（可选，用于记分，最多12个英文字符或等效宽度的中文）',
+    nickName: '玩家昵称（可选，用于记分，最多16个英文字符或等效宽度的中文）',
     yourVoice: '你的语音', maleVoice: '男声 🧑', femaleVoice: '女声 👩',
     gameSpeed: '游戏速度（AI思考时间）',
     startGame: '开始游戏', seat: '座位', emptySeat: '空座位', selected: '已选',
@@ -654,7 +654,7 @@ const LANG_DATA = {
   'en': {
     setupTitle: "Texas Hold'em", setupSub: 'Choose 1-2 seats to control. Others are AI. Selecting 2 seats enables privacy mode so two players can share one screen.',
     playerCount: 'Players', selectSeats: 'Your seats (1-2)', stackBlinds: 'Stack / Blinds',
-    nickName: 'Nickname (optional, max 12 English chars or equivalent)',
+    nickName: 'Nickname (optional, max 16 English chars or equivalent)',
     yourVoice: 'Your Voice', maleVoice: 'Male 🧑', femaleVoice: 'Female 👩',
     gameSpeed: 'Game Speed (AI think time)',
     startGame: 'Start Game', seat: 'Seat', emptySeat: 'Empty', selected: 'Selected',
@@ -680,7 +680,7 @@ const LANG_DATA = {
   'ja': {
     setupTitle: 'テキサスホールデム', setupSub: '操作する席を1-2つ選んでください。2席選択するとプライバシーモードが有効になります。',
     playerCount: 'プレイヤー数', selectSeats: '操作する席（1-2）', stackBlinds: 'スタック / ブラインド',
-    nickName: 'ニックネーム（任意、最大12英文字相当）',
+    nickName: 'ニックネーム（任意、最大16英文字相当）',
     yourVoice: '音声の性別', maleVoice: '男性 🧑', femaleVoice: '女性 👩',
     gameSpeed: 'ゲーム速度（AI思考時間）',
     startGame: 'ゲーム開始', seat: '席', emptySeat: '空席', selected: '選択済',
@@ -1560,32 +1560,72 @@ function backCardEl(small){
 
 function ellipseFracs(w){
   // 窄屏下座位卡片相对桌宽占比更大，半径系数收一点，避免卡片贴边被裁切
-  return w<440 ? {rx:0.34, ry:0.37} : {rx:0.42, ry:0.40};
+  return w<440 ? {rx:0.36, ry:0.38} : {rx:0.43, ry:0.41};
 }
-function seatPosition(i, n, w, h){
-  // 椭圆分布，起点在底部偏左，顺时针
+// 椭圆周长上"等弧长"分布用的累积弧长表：扁椭圆下，角度等分会让座位在长轴两端
+// （参数化速度最慢的地方）挤在一起，必须按弧长而不是角度来等分才会视觉均匀
+function buildEllipseArcTable(rx, ry){
+  const STEPS=360;
+  const cum=[0];
+  let prevX=rx, prevY=0;
+  for(let s=1;s<=STEPS;s++){
+    const t=(Math.PI*2*s)/STEPS;
+    const x=rx*Math.cos(t), y=ry*Math.sin(t);
+    cum.push(cum[s-1]+Math.hypot(x-prevX, y-prevY));
+    prevX=x; prevY=y;
+  }
+  return {cum, total:cum[STEPS], steps:STEPS};
+}
+function angleForArcFraction(table, frac){
+  const target=(((frac%1)+1)%1) * table.total;
+  let lo=0, hi=table.steps;
+  while(lo<hi){ const mid=(lo+hi)>>1; if(table.cum[mid]<target) lo=mid+1; else hi=mid; }
+  const idx=Math.max(1, Math.min(table.steps, lo));
+  const span=table.cum[idx]-table.cum[idx-1] || 1;
+  const segFrac=(target-table.cum[idx-1])/span;
+  return ((idx-1+segFrac)/table.steps) * Math.PI*2;
+}
+function seatPosition(i, n, w, h, arcTable){
+  // 椭圆等弧长分布，起点在底部偏左，顺时针
   const {rx:rxFrac, ry:ryFrac} = ellipseFracs(w);
-  const angle = (Math.PI*2*i/n) + Math.PI/2;
   const rx = w*rxFrac, ry = h*ryFrac;
+  const table = arcTable || buildEllipseArcTable(rx, ry);
+  const angle = angleForArcFraction(table, i/n) + Math.PI/2;
   const cx = w/2, cy = h/2;
   return { x: cx + rx*Math.cos(angle), y: cy + ry*Math.sin(angle) };
 }
-function computeSeatSize(n, w, h){
+function computeSeatSize(n, w, h, arcTable){
   // 按"相邻座位中心点的最小间距"反推座位卡片应有的宽度/字号，
   // 保证座位数多、屏幕窄时卡片也不会互相重叠（而不是用固定断点硬编宽度）
   const {rx:rxFrac, ry:ryFrac} = ellipseFracs(w);
   const rx=w*rxFrac, ry=h*ryFrac;
+  const table = arcTable || buildEllipseArcTable(rx, ry);
   let minDist=Infinity;
   for(let i=0;i<n;i++){
-    const a1=(Math.PI*2*i/n)+Math.PI/2;
-    const a2=(Math.PI*2*((i+1)%n)/n)+Math.PI/2;
+    const a1=angleForArcFraction(table, i/n)+Math.PI/2;
+    const a2=angleForArcFraction(table, ((i+1)%n)/n)+Math.PI/2;
     const dx=rx*(Math.cos(a2)-Math.cos(a1));
     const dy=ry*(Math.sin(a2)-Math.sin(a1));
     minDist=Math.min(minDist, Math.hypot(dx,dy));
   }
-  const width=Math.max(64, Math.min(148, minDist*0.74));
-  const fontSize=Math.max(8.5, Math.min(13, width*0.088));
+  const width=Math.max(64, Math.min(168, minDist*0.74));
+  const fontSize=Math.max(8.5, Math.min(14, width*0.088));
   return { width, fontSize };
+}
+function sizeTableWrap(wrap){
+  // 桌子尺寸完全由JS算出来贴满可用视口（而不是CSS定死一个尺寸），
+  // 4K大屏下也能用满空间，小屏/手机下又不会顶到操作面板
+  const topbar=document.querySelector('.topbar');
+  const topbarH = topbar ? topbar.getBoundingClientRect().height : 60;
+  const reserveBelow = 270; // 给操作面板/下一手按钮/安全边距预留的空间
+  const availW = Math.max(280, window.innerWidth - 28);
+  const availH = Math.max(220, window.innerHeight - topbarH - reserveBelow);
+  const RATIO = 1.86; // 宽:高，贴近正统德州椭圆桌的长宽比
+  let w = Math.min(availW, 1600, availH*RATIO);
+  w = Math.max(w, 300);
+  const h = w/RATIO;
+  wrap.style.width = w+'px';
+  wrap.style.height = h+'px';
 }
 
 function formatBB(x){
@@ -1617,26 +1657,29 @@ function renderAll(){
   const seatsContainer=document.getElementById('seats');
   seatsContainer.innerHTML='';
   const wrap=document.querySelector('.table-wrap');
-  wrap.style.height=''; // 先还原成CSS响应式高度，再按需临时加高，避免多次渲染后高度被越叠越大
+  sizeTableWrap(wrap);
   const w=wrap.clientWidth;
   let h=wrap.clientHeight;
   const n=game.players.length;
-  let seatSize=computeSeatSize(n, w, h);
+  const {rx:rxFrac, ry:ryFrac} = ellipseFracs(w);
+  let arcTable=buildEllipseArcTable(w*rxFrac, h*ryFrac);
+  let seatSize=computeSeatSize(n, w, h, arcTable);
   if(seatSize.width<80){
     // 人数多、屏幕又矮又窄时，固定座位宽度下限会导致互相重叠：
     // 优先临时把桌子拉高一些换取座位间距，而不是让卡片叠在一起
-    const maxH=Math.min(window.innerHeight*0.78, 620);
+    const maxH=Math.min(window.innerHeight*0.78, 900);
     let guard=0;
     while(seatSize.width<80 && h<maxH && guard<8){
       h=Math.min(maxH, h*1.15);
-      seatSize=computeSeatSize(n, w, h);
+      arcTable=buildEllipseArcTable(w*rxFrac, h*ryFrac);
+      seatSize=computeSeatSize(n, w, h, arcTable);
       guard++;
     }
     wrap.style.height=h+'px';
   }
 
   game.players.forEach((p,i)=>{
-    const pos=seatPosition(i,n,w,h);
+    const pos=seatPosition(i,n,w,h,arcTable);
     const seat=document.createElement('div');
     const actingNow = i===actingSeatId && !p.folded;
     seat.className='seat'+(p.isHuman?' human':'')+(p.folded?' folded':'')+(actingNow?' acting':'');
@@ -1687,9 +1730,109 @@ function renderPrivacyGate(p, view){
   };
 }
 
+// AI辅助面板用到的全部文案，按语言分组，跟着 currentLang 走（不影响游戏规则判断）
+const HINT_STRINGS = {
+  'zh-CN': {
+    pair:(r)=>`对子 ${r}`,
+    suitedHighLow:(suited,high,low)=>`${suited?'同花':'不同花'} ${high} ${low}`,
+    madeDesc:(name,kicker)=>`${name}（${kicker}带头）`,
+    handTypeLine:(desc)=>`牌型：${desc}`,
+    preflopLine:'阶段：翻牌前',
+    opponentsLine:(n,pct)=>`剩余对手：${n}人 · 模拟胜率：${pct}%`,
+    potOddsLine:(toCall,winTotal,pct)=>`底池赔率：跟注 ${toCall} 赢 ${winTotal}（需 ${pct}%+ 胜率才划算）`,
+    noOneBetLine:'当前无人下注（可以自由选择过牌或下注）',
+    outsJoin:(entries)=>entries.map(([k,v])=>k+' '+v+'张').join('、'),
+    outsLine:(entries)=>`   抽牌机会：${entries}`,
+    outsLineCall:(entries)=>`   有抽牌可能：${entries}，跟注等看牌是合理的`,
+    outsCountLine:(n)=>`   有 ${n} 种抽牌方向可博，跟注看下一张也行`,
+    strongValueBet:'🟢 牌力强，建议下注/加注 — 可以考虑底池的 60-80% 作为下注额（价值下注）',
+    goodValueBet:'🟢 胜率优势明显，建议下注底池的 50-65% 来建立池面价值',
+    midBet:'🟡 中等牌力，可以小注底池的30-50%试探（半咋呼），也能过牌观望',
+    flushDrawCheck:'   有听同花潜质，不下注也可先过牌免费看转牌',
+    weakCheck:'🟡 牌力一般，建议过牌省钱。偶尔用底池30%以下极小注咋呼',
+    bigRaise:'🟢 胜率大幅超过赔率要求！可以考虑加注而非仅跟注',
+    strongRaiseSize:'   强牌：加注到底池60-80%，不要慢打让对手免费看牌',
+    valueRaiseSize:'   价值加注到底池50-70%，如果牌面有顺/花可能可以再加一点',
+    callOk:'🟡 胜率刚好超过赔率要求，跟注是正期望值决策',
+    weakCallOnly:'   但手牌本身不算强，建议跟注即可不要加注',
+    closeCall:'🟡 胜率小幅落后赔率要求——但如果考虑隐含赔率（成牌后能赢更多），偶尔跟注也可以',
+    noDrawFold:'   但没什么好抽的，建议弃牌保存筹码',
+    clearFold:'🔴 胜率明显不如赔率要求，建议弃牌',
+    bluffHint:'   除非你用很小的代价诈唬或者有非常隐蔽的抽牌',
+    bluffSuggest:'💡 牌不好但可以偶尔咋呼：下底池30-40%即可（假装有好牌吓走对手）',
+    strongStrategy:'💡 强牌策略：大注(底池70%+)向听牌/较弱牌施压，小注(底池40%)诱使对手跟注',
+    pressureRaise:'💡 对手下注不大而你有优势，加注到底池60%直接结束战斗',
+  },
+  'en': {
+    pair:(r)=>`Pair of ${r}`,
+    suitedHighLow:(suited,high,low)=>`${suited?'Suited':'Offsuit'} ${high}${low}`,
+    madeDesc:(name,kicker)=>`${name} (${kicker} high)`,
+    handTypeLine:(desc)=>`Hand: ${desc}`,
+    preflopLine:'Stage: Pre-Flop',
+    opponentsLine:(n,pct)=>`Opponents left: ${n} · Win prob: ${pct}%`,
+    potOddsLine:(toCall,winTotal,pct)=>`Pot odds: call ${toCall} to win ${winTotal} (need ${pct}%+ equity to be worth it)`,
+    noOneBetLine:'No one has bet yet (free to check or bet)',
+    outsJoin:(entries)=>entries.map(([k,v])=>`${k} ${v}`).join(', '),
+    outsLine:(entries)=>`   Draws: ${entries}`,
+    outsLineCall:(entries)=>`   Possible draws: ${entries} — calling to see the next card is reasonable`,
+    outsCountLine:(n)=>`   ${n} draw type(s) still live — calling to see the next card is fine`,
+    strongValueBet:"🟢 Strong hand — bet/raise. Consider 60-80% of pot (value bet)",
+    goodValueBet:'🟢 Clear equity edge — bet 50-65% of pot to build value',
+    midBet:'🟡 Medium strength — a small 30-50% pot probe bet (semi-bluff) works, or check back',
+    flushDrawCheck:"   You have flush-draw potential — checking to see the turn for free is fine too",
+    weakCheck:'🟡 Weak hand — check to save chips. Occasionally bluff under 30% of pot',
+    bigRaise:"🟢 Equity far exceeds what the odds require! Consider raising instead of just calling",
+    strongRaiseSize:"   Strong hand: raise to 60-80% of pot — don't slow-play and give a free card",
+    valueRaiseSize:'   Value-raise to 50-70% of pot, a bit more if the board has straight/flush potential',
+    callOk:'🟡 Equity just clears the odds required — calling is +EV',
+    weakCallOnly:"   But the hand itself isn't strong — just call, don't raise",
+    closeCall:'🟡 Equity is slightly behind the odds required — but with implied odds (winning more once you hit), an occasional call is fine',
+    noDrawFold:'   Not much to draw to though — better to fold and save chips',
+    clearFold:'🔴 Equity clearly falls short of the odds required — fold',
+    bluffHint:"   Unless you're bluffing cheaply or have a very well-hidden draw",
+    bluffSuggest:'💡 Weak hand but worth an occasional bluff: 30-40% of pot is enough (looks like a strong hand)',
+    strongStrategy:"💡 Strong-hand strategy: bet big (70%+ pot) to pressure draws/weaker hands, or small (40% pot) to lure calls",
+    pressureRaise:"💡 Opponent's bet is small and you have the edge — raise to 60% of pot to end it now",
+  },
+  'ja': {
+    pair:(r)=>`ペア ${r}`,
+    suitedHighLow:(suited,high,low)=>`${suited?'スーテッド':'オフスート'} ${high}${low}`,
+    madeDesc:(name,kicker)=>`${name}（キッカー ${kicker}）`,
+    handTypeLine:(desc)=>`ハンド：${desc}`,
+    preflopLine:'ステージ：プリフロップ',
+    opponentsLine:(n,pct)=>`残り対戦者：${n}人 · 勝率：${pct}%`,
+    potOddsLine:(toCall,winTotal,pct)=>`ポットオッズ：コール ${toCall} で ${winTotal} 獲得（${pct}%以上の勝率が必要）`,
+    noOneBetLine:'誰もベットしていません（チェックかベットを自由に選べます）',
+    outsJoin:(entries)=>entries.map(([k,v])=>`${k} ${v}枚`).join('、'),
+    outsLine:(entries)=>`   ドロー：${entries}`,
+    outsLineCall:(entries)=>`   ドローの可能性：${entries}、次のカードを見るためコールするのは合理的`,
+    outsCountLine:(n)=>`   ${n}種類のドローがあり、次のカードを見るためコールするのも良い`,
+    strongValueBet:'🟢 強いハンド、ベット/レイズ推奨 — ポットの60-80%程度（バリューベット）',
+    goodValueBet:'🟢 明確な勝率優位、ポットの50-65%をベットしてバリューを築く',
+    midBet:'🟡 中程度の強さ、ポットの30-50%の小さいベット（セミブラフ）か、チェックも可',
+    flushDrawCheck:'   フラッシュドローの可能性あり、ベットせずチェックしてターンを無料で見るのも良い',
+    weakCheck:'🟡 弱いハンド、チェックして節約。時々ポットの30%未満でブラフも',
+    bigRaise:'🟢 勝率がオッズを大きく上回っている！コールだけでなくレイズを検討',
+    strongRaiseSize:'   強いハンド：ポットの60-80%にレイズ、スローダウンして無料カードを与えない',
+    valueRaiseSize:'   ポットの50-70%にバリューレイズ、ストレート/フラッシュの可能性があればもう少し増やしても',
+    callOk:'🟡 勝率がちょうどオッズを上回る、コールはプラスEVの判断',
+    weakCallOnly:'   ただしハンド自体は強くない、レイズせずコールのみ推奨',
+    closeCall:'🟡 勝率がオッズにわずかに届かない——インプライドオッズ（完成後の追加獲得）を考えれば時々コールも可',
+    noDrawFold:'   ただし良いドローもない、フォールドしてチップを節約推奨',
+    clearFold:'🔴 勝率がオッズに明らかに届かない、フォールド推奨',
+    bluffHint:'   小さいコストのブラフか、非常に隠れたドローがある場合を除いて',
+    bluffSuggest:'💡 ハンドは弱いが時々ブラフも：ポットの30-40%で十分（強いハンドに見せかける）',
+    strongStrategy:'💡 強いハンド戦略：大きいベット（ポット70%+）でドロー/弱いハンドにプレッシャーを、小さいベット（ポット40%）でコールを誘う',
+    pressureRaise:'💡 相手のベットが小さくあなたに優位がある、ポットの60%にレイズして即座に終わらせる',
+  },
+};
+function HT(key, ...args){
+  const dict = HINT_STRINGS[currentLang] || HINT_STRINGS['zh-CN'];
+  const v = dict[key]!==undefined ? dict[key] : HINT_STRINGS['zh-CN'][key];
+  return typeof v==='function' ? v(...args) : v;
+}
 function getHandTypeName(score){
-  const names=['高牌','一对','两对','三条','顺子','同花','葫芦','四条','同花顺'];
-  return {name:names[score[0]]||'高牌', kickers:score.slice(1)};
+  return {name:handNameI18n(score[0]), kickers:score.slice(1)};
 }
 function getHandTypeDesc(hole, board){
   const all=[...hole,...board];
@@ -1699,8 +1842,8 @@ function getHandTypeDesc(hole, board){
     const pair=a===b;
     const high=Math.max(a,b), low=Math.min(a,b);
     let desc=[]; let isStrong=false;
-    if(pair) desc.push(`对子 ${RANK_LABEL[a]||a}`);
-    else{ desc.push(`${suited?'同花':'不同花'} ${RANK_LABEL[high]||high} ${RANK_LABEL[low]||low}`); }
+    if(pair) desc.push(HT('pair', RANK_LABEL[a]||a));
+    else{ desc.push(HT('suitedHighLow', suited, RANK_LABEL[high]||high, RANK_LABEL[low]||low)); }
     if(high>=14||(high>=13&&low>=10)) isStrong=true;
     return {desc:desc.join(' '), isStrong, gap:high-low, suited};
   }
@@ -1710,24 +1853,26 @@ function getHandTypeDesc(hole, board){
   // 抽牌判断
   const cards5=combinations(all,5).map(evaluate5).sort(cmpScore).reverse();
   const made=score[0];
-  // 计算抽牌
+  // 计算抽牌（顺子/同花/葫芦/四条/同花顺 对应 HAND_NAMES 下标 4-8，outs 用下标做内部key，显示时才翻译）
   const unseenCards=makeDeck().filter(c=>!all.some(oc=>oc.r===c.r&&oc.s===c.s));
   const outs={};
-  for(const drawType of ['顺子','同花','葫芦','四条','同花顺']){
-    const idx=['高牌','一对','两对','三条','顺子','同花','葫芦','四条','同花顺'].indexOf(drawType);
+  for(const idx of [4,5,6,7,8]){
     if(made>=idx) continue;
     let count=0;
     for(const c of unseenCards){
       const testScore=evaluate7([...all,c]);
       if(testScore[0]>=idx) count++;
     }
-    if(count>0) outs[drawType]=count;
+    if(count>0) outs[idx]=count;
   }
   return {
-    desc:`${ht.name}（${RANK_LABEL[score[1]]||score[1]}带头）`,
+    desc:HT('madeDesc', ht.name, RANK_LABEL[score[1]]||score[1]),
     made, score, outs,
-    flushDraw:all.filter(c=>c.s).length>=4 ? Object.keys(outs).includes('同花')?false:true : false,
+    flushDraw:all.filter(c=>c.s).length>=4 ? !(5 in outs) : false,
   };
+}
+function outsEntriesOf(handInfo){
+  return Object.entries(handInfo.outs).map(([idx,v])=>[handNameI18n(Number(idx)), v]);
 }
 function getHintAdvice(equity, toCall, pot, hole, board, numOpponents){
   const handInfo=board.length>0 ? getHandTypeDesc(hole, board) : null;
@@ -1735,55 +1880,55 @@ function getHintAdvice(equity, toCall, pot, hole, board, numOpponents){
   const equityPct=Math.round(equity*100);
   const margin=equity - (toCall>0 ? toCall/(pot+toCall) : 0);
   let lines=[];
-  if(handInfo) lines.push(`牌型：${handInfo.desc}`);
-  if(board.length===0) lines.push(`阶段：翻牌前`);
-  lines.push(`剩余对手：${numOpponents}人 · 模拟胜率：${equityPct}%`);
-  if(toCall>0) lines.push(`底池赔率：跟注 ${toCall} 赢 ${pot+toCall}（需 ${potOdds}%+ 胜率才划算）`);
-  if(toCall===0 && board.length>0) lines.push(`当前无人下注（可以自由选择过牌或下注）`);
+  if(handInfo) lines.push(HT('handTypeLine', handInfo.desc));
+  if(board.length===0) lines.push(HT('preflopLine'));
+  lines.push(HT('opponentsLine', numOpponents, equityPct));
+  if(toCall>0) lines.push(HT('potOddsLine', toCall, pot+toCall, potOdds));
+  if(toCall===0 && board.length>0) lines.push(HT('noOneBetLine'));
 
   // 分析建议
   if(toCall===0){
-    if(equity>0.7) lines.push('🟢 牌力强，建议下注/加注 — 可以考虑底池的 60-80% 作为下注额（价值下注）');
-    else if(equity>0.55) lines.push('🟢 胜率优势明显，建议下注底池的 50-65% 来建立池面价值');
+    if(equity>0.7) lines.push(HT('strongValueBet'));
+    else if(equity>0.55) lines.push(HT('goodValueBet'));
     else if(equity>0.4){
-      lines.push('🟡 中等牌力，可以小注底池的30-50%试探（半咋呼），也能过牌观望');
-      if(handInfo && handInfo.flushDraw) lines.push('   有听同花潜质，不下注也可先过牌免费看转牌');
+      lines.push(HT('midBet'));
+      if(handInfo && handInfo.flushDraw) lines.push(HT('flushDrawCheck'));
     } else{
-      lines.push('🟡 牌力一般，建议过牌省钱。偶尔用底池30%以下极小注咋呼');
+      lines.push(HT('weakCheck'));
       if(handInfo && Object.keys(handInfo.outs).length>0){
-        lines.push(`   抽牌机会：${Object.entries(handInfo.outs).map(([k,v])=>k+' '+v+'张').join('、')}`);
+        lines.push(HT('outsLine', HT('outsJoin', outsEntriesOf(handInfo))));
       }
     }
   } else {
     if(margin>0.15 && equity>0.6){
-      lines.push('🟢 胜率大幅超过赔率要求！可以考虑加注而非仅跟注');
-      if(equity>0.75) lines.push('   强牌：加注到底池60-80%，不要慢打让对手免费看牌');
-      else lines.push('   价值加注到底池50-70%，如果牌面有顺/花可能可以再加一点');
+      lines.push(HT('bigRaise'));
+      if(equity>0.75) lines.push(HT('strongRaiseSize'));
+      else lines.push(HT('valueRaiseSize'));
     } else if(margin>0){
-      lines.push('🟡 胜率刚好超过赔率要求，跟注是正期望值决策');
-      if(equity<0.45) lines.push('   但手牌本身不算强，建议跟注即可不要加注');
+      lines.push(HT('callOk'));
+      if(equity<0.45) lines.push(HT('weakCallOnly'));
       else if(handInfo && Object.keys(handInfo.outs).length>0){
-        lines.push(`   有抽牌可能：${Object.entries(handInfo.outs).map(([k,v])=>k+' '+v+'张').join('、')}，跟注等看牌是合理的`);
+        lines.push(HT('outsLineCall', HT('outsJoin', outsEntriesOf(handInfo))));
       }
     } else if(margin>-0.08){
-      lines.push('🟡 胜率小幅落后赔率要求——但如果考虑隐含赔率（成牌后能赢更多），偶尔跟注也可以');
-      if(handInfo && Object.keys(handInfo.outs).length>0) lines.push(`   有 ${Object.keys(handInfo.outs).length} 种抽牌方向可博，跟注看下一张也行`);
-      else lines.push('   但没什么好抽的，建议弃牌保存筹码');
+      lines.push(HT('closeCall'));
+      if(handInfo && Object.keys(handInfo.outs).length>0) lines.push(HT('outsCountLine', Object.keys(handInfo.outs).length));
+      else lines.push(HT('noDrawFold'));
     } else {
-      lines.push('🔴 胜率明显不如赔率要求，建议弃牌');
-      if(equity<0.3) lines.push('   除非你用很小的代价诈唬或者有非常隐蔽的抽牌');
+      lines.push(HT('clearFold'));
+      if(equity<0.3) lines.push(HT('bluffHint'));
     }
   }
 
   // 咋呼 / 下注策略建议
   if(equity<0.35 && toCall===0 && Math.random()<0.5){
-    lines.push('💡 牌不好但可以偶尔咋呼：下底池30-40%即可（假装有好牌吓走对手）');
+    lines.push(HT('bluffSuggest'));
   }
   if(equity>0.7 && toCall===0){
-    lines.push('💡 强牌策略：大注(底池70%+)向听牌/较弱牌施压，小注(底池40%)诱使对手跟注');
+    lines.push(HT('strongStrategy'));
   }
   if(toCall>0 && equity>0.65 && toCall<=pot*0.5){
-    lines.push('💡 对手下注不大而你有优势，加注到底池60%直接结束战斗');
+    lines.push(HT('pressureRaise'));
   }
 
   const tone = margin>0.15 ? 'good' : (margin>-0.08 ? 'mid' : 'bad');
@@ -1972,7 +2117,7 @@ function buildSetupUI(){
   [document.getElementById('nameInput1'), document.getElementById('nameInput2')].forEach(input=>{
     input.addEventListener('input', ()=>{
       let v=input.value;
-      while(nameWeight(v)>12) v=v.slice(0,-1);
+      while(nameWeight(v)>16) v=v.slice(0,-1);
       if(v!==input.value) input.value=v;
     });
   });
@@ -2207,6 +2352,11 @@ document.getElementById('settingLang').onchange = function(){
   currentLang = this.value;
   applyLanguage();
   if(game) renderAll();
+  // 如果当前正等着真人操作（行动面板/AI辅助已经显示出来），立刻用新语言重新渲染一遍，
+  // 不用等到下一轮行动才生效
+  if(pendingHumanResolve && document.getElementById('actionPanel').classList.contains('show')){
+    renderActionPanel(pendingHumanResolve.player, pendingHumanResolve.view);
+  }
 };
 
 let gamePaused=false;
